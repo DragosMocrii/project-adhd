@@ -261,6 +261,7 @@ configure_superpowers() {
 
   case "$claude_state" in
     missing)
+      claude plugin marketplace update claude-plugins-official
       claude plugin install superpowers@claude-plugins-official --scope user --yes
       ;;
     disabled)
