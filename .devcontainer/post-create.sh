@@ -181,6 +181,63 @@ process.exit(1);
 '
 }
 
+parse_claude_marketplace_state() {
+  local marketplace_json="$1"
+
+  printf '%s' "$marketplace_json" | bun -e '
+const expectedName = "claude-plugins-official";
+let document;
+
+try {
+  document = JSON.parse(await Bun.stdin.text());
+} catch (error) {
+  console.error(`Unable to parse Claude marketplace list JSON: ${error instanceof Error ? error.message : String(error)}`);
+  process.exit(1);
+}
+
+function collectEntries(value) {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== "object") return [];
+
+  const entries = [];
+  for (const key of ["marketplaces", "items", "data"]) {
+    if (key in value) entries.push(...collectEntries(value[key]));
+  }
+
+  if (
+    typeof value.name === "string" ||
+    typeof value.id === "string" ||
+    typeof value.marketplace === "string"
+  ) {
+    entries.push(value);
+  }
+
+  if (entries.length === 0) {
+    for (const [key, child] of Object.entries(value)) {
+      if (key === expectedName) {
+        entries.push(
+          child && typeof child === "object" && !Array.isArray(child)
+            ? { ...child, name: expectedName }
+            : { name: expectedName, installed: child },
+        );
+      }
+    }
+  }
+
+  return entries;
+}
+
+const present = collectEntries(document).some((entry) => {
+  if (typeof entry === "string") return entry === expectedName;
+  if (!entry || typeof entry !== "object") return false;
+  return [entry.name, entry.id, entry.marketplace]
+    .some((value) => value === expectedName);
+});
+
+process.stdout.write(`${present ? "present" : "missing"}\n`);
+'
+}
+
 parse_codex_plugin_state() {
   local plugin_json="$1"
 
@@ -249,7 +306,8 @@ process.stdout.write(`${installed ? "installed" : "missing"}\n`);
 }
 
 configure_superpowers() {
-  local claude_plugins claude_state install_path codex_plugins codex_state
+  local claude_plugins claude_state claude_marketplaces marketplace_state
+  local install_path codex_plugins codex_state
 
   echo '==> Checking Claude Superpowers plugin'
   if ! claude_plugins="$(claude plugin list --json)"; then
@@ -261,7 +319,23 @@ configure_superpowers() {
 
   case "$claude_state" in
     missing)
-      claude plugin marketplace update claude-plugins-official
+      if ! claude_marketplaces="$(claude plugin marketplace list --json)"; then
+        die 'Unable to list Claude marketplaces'
+      fi
+      if ! marketplace_state="$(parse_claude_marketplace_state "$claude_marketplaces")"; then
+        die 'Unable to parse Claude marketplace metadata'
+      fi
+      case "$marketplace_state" in
+        missing)
+          claude plugin marketplace add anthropics/claude-plugins-official --scope user
+          ;;
+        present)
+          claude plugin marketplace update claude-plugins-official
+          ;;
+        *)
+          die "Unexpected Claude marketplace state: $marketplace_state"
+          ;;
+      esac
       claude plugin install superpowers@claude-plugins-official --scope user --yes
       ;;
     disabled)
