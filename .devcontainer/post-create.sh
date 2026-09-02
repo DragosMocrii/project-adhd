@@ -13,18 +13,27 @@ readonly -a STATE_ROOTS=(
   "$HOME/.codex"
   "$HOME/.omp"
 )
+readonly -a INSTALLER_ROOTS=(
+  "$HOME/.local"
+  "$HOME/.local/bin"
+  "$HOME/.local/share"
+  "$HOME/.bun"
+  "$HOME/.bun/bin"
+  "$HOME/.bun/install"
+  "$HOME/.bun/install/global"
+)
 
 die() {
   printf 'post-create: %s\n' "$*" >&2
   exit 1
 }
 
-repair_state_ownership() {
+repair_directory_ownership() {
   local dir owner uid gid
   uid="$(id -u)"
   gid="$(id -g)"
 
-  for dir in "${STATE_ROOTS[@]}"; do
+  for dir in "$@"; do
     if [[ ! -d "$dir" ]]; then
       sudo mkdir -p "$dir"
     fi
@@ -34,7 +43,18 @@ repair_state_ownership() {
       printf '==> Taking ownership of %s\n' "$dir"
       sudo chown "$uid:$gid" "$dir"
     fi
+
+    [[ -w "$dir" ]] || die "Directory is not writable: $dir"
   done
+}
+
+repair_state_ownership() {
+  repair_directory_ownership "${STATE_ROOTS[@]}"
+}
+
+repair_installer_ownership() {
+  repair_directory_ownership "${INSTALLER_ROOTS[@]}"
+  [[ -w "$HOME/.bun" ]] || die "Bun home is not writable: $HOME/.bun"
 }
 
 configure_github_auth() {
@@ -306,6 +326,7 @@ install_archify() {
 
 main() {
   repair_state_ownership
+  repair_installer_ownership
   configure_github_auth
   install_tools
   configure_rtk
