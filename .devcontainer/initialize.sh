@@ -87,7 +87,10 @@ if [[ -e "$state_env" || -L "$state_env" ]]; then
   fi
 
   state_lines=()
-  mapfile -t state_lines < "$state_env"
+  state_line_count=$(wc -l < "$state_env")
+  if (( state_line_count == 1 )); then
+    mapfile -t state_lines < "$state_env"
+  fi
   if (( ${#state_lines[@]} != 1 )) ||
     [[ ! "${state_lines[0]}" =~ ^PROJECT_STATE_PREFIX=[a-z0-9][a-z0-9-]*-[0-9a-f]{8}$ ]]; then
     state_lines=()
