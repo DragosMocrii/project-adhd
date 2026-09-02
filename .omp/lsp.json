@@ -1,0 +1,27 @@
+{
+  "servers": {
+    "typescript-native": {
+      "command": "bun",
+      "args": [
+        "node_modules/typescript/lib/tsc.js",
+        "--lsp",
+        "--stdio"
+      ],
+      "fileTypes": [
+        ".ts",
+        ".tsx",
+        ".js",
+        ".jsx",
+        ".mts",
+        ".cts",
+        ".mjs",
+        ".cjs"
+      ],
+      "rootMarkers": [
+        "package.json",
+        "tsconfig.json",
+        "jsconfig.json"
+      ]
+    }
+  }
+}

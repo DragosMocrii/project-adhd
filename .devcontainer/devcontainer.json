@@ -1,0 +1,39 @@
+{
+  "name": "Agentic Bun and TypeScript",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "workspace",
+  "workspaceFolder": "/workspace",
+  "features": {
+    "ghcr.io/devcontainers-extra/features/bun:1": {
+      "version": "1.4.0"
+    },
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "26"
+    },
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {
+      "version": "2.97.0"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "Oven.bun-vscode",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-azuretools.vscode-docker"
+      ]
+    }
+  },
+  "initializeCommand": "bash ${localWorkspaceFolder}/.devcontainer/initialize.sh ${localWorkspaceFolder}",
+  "updateContentCommand": "bun install --frozen-lockfile",
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "remoteUser": "vscode",
+  "containerEnv": {
+    "CLAUDE_CONFIG_DIR": "/home/vscode/.claude",
+    "LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}"
+  },
+  "remoteEnv": {
+    "PATH": "/home/vscode/.bun/bin:/home/vscode/.local/bin:${containerEnv:PATH}"
+  }
+}
