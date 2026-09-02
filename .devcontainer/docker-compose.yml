@@ -1,0 +1,29 @@
+name: "${PROJECT_STATE_PREFIX}-devcontainer"
+
+services:
+  workspace:
+    image: mcr.microsoft.com/devcontainers/base@sha256:d94c97dd9cacf183d0a6fd12a8e87b526e9e928307674ae9c94139139c0c6eae
+    env_file: devcontainer.env
+    command: sleep infinity
+    volumes:
+      - claude-state:/home/vscode/.claude
+      - github-state:/home/vscode/.config/gh
+      - rtk-config-state:/home/vscode/.config/rtk
+      - rtk-data-state:/home/vscode/.local/share/rtk
+      - codex-state:/home/vscode/.codex
+      - omp-state:/home/vscode/.omp
+      - ..:/workspace:cached
+
+volumes:
+  claude-state:
+    name: "${PROJECT_STATE_PREFIX}-claude"
+  github-state:
+    name: "${PROJECT_STATE_PREFIX}-gh"
+  rtk-config-state:
+    name: "${PROJECT_STATE_PREFIX}-rtk-config"
+  rtk-data-state:
+    name: "${PROJECT_STATE_PREFIX}-rtk-data"
+  codex-state:
+    name: "${PROJECT_STATE_PREFIX}-codex"
+  omp-state:
+    name: "${PROJECT_STATE_PREFIX}-omp"
