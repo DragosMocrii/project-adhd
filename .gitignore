@@ -1,0 +1,41 @@
+# Bun and Node dependencies
+node_modules/
+
+# Generated output
+out/
+dist/
+*.tgz
+
+# Coverage output
+coverage/
+*.lcov
+
+# Logs and generated reports
+logs/
+*.log
+report.*.json
+
+# Environment files
+.env
+.env.*
+!.env.example
+/.devcontainer/.env
+/.devcontainer/devcontainer.env
+
+# Caches
+.eslintcache
+.cache/
+*.tsbuildinfo
+
+# Project-local worktrees and Superpowers state
+/.worktrees/
+/.claude/worktrees/
+/.superpowers/
+
+# IDE state
+.idea/
+.vscode/
+
+# Operating-system artifacts
+.DS_Store
+Thumbs.db
