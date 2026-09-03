@@ -65,17 +65,33 @@ configure_github_auth() {
 }
 
 install_tools() {
-  echo '==> Installing Claude Code'
-  curl -fsSL https://claude.ai/install.sh | bash
+  if command -v claude >/dev/null 2>&1; then
+    echo '==> Claude Code is already installed; skipping Claude installer'
+  else
+    echo '==> Installing Claude Code'
+    curl -fsSL https://claude.ai/install.sh | bash
+  fi
 
-  echo '==> Installing rtk'
-  curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
+  if command -v rtk >/dev/null 2>&1 && rtk gain >/dev/null 2>&1; then
+    echo '==> rtk is already installed and verified; skipping rtk installer'
+  else
+    echo '==> Installing rtk'
+    curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
+  fi
 
-  echo '==> Installing codex'
-  curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh
+  if command -v codex >/dev/null 2>&1; then
+    echo '==> Codex is already installed; skipping Codex installer'
+  else
+    echo '==> Installing codex'
+    curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh
+  fi
 
-  echo '==> Installing omp (Oh My Pi)'
-  bun install -g @oh-my-pi/pi-coding-agent
+  if command -v omp >/dev/null 2>&1; then
+    echo '==> OMP is already installed; skipping OMP installer'
+  else
+    echo '==> Installing omp (Oh My Pi)'
+    bun install -g @oh-my-pi/pi-coding-agent
+  fi
 }
 
 configure_rtk() {
