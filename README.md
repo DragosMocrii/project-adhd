@@ -24,7 +24,7 @@ bash .devcontainer/post-create.sh
 .devcontainer/verify.sh
 ```
 
-The rerun installs or enables Superpowers through each CLI's native mechanism, including Codex's reserved `openai-curated` marketplace. Complete the OMP provider setup if OMP asks for it after authentication. Credentials and configuration stay in this project's state volumes; they are not shared with another generated project.
+The rerun installs or enables Superpowers through each CLI's native mechanism, selecting the exposed reserved Codex catalog: `openai-curated` for ChatGPT authentication or `openai-api-curated` for API-key authentication. Complete the OMP provider setup if OMP asks for it after authentication. Credentials and configuration stay in this project's state volumes; they are not shared with another generated project.
 
 ## Worktrees and persistent state
 

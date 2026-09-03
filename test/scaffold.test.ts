@@ -327,13 +327,14 @@ test("runs pre-login post-create successfully while still installing auth-free A
     }
 
     const stubs: Record<string, string> = {
-      curl: "#!/bin/sh\nprintf ':'\n",
-      bun: "#!/bin/sh\nexit 0\n",
+      curl: "#!/bin/sh\ncase \"$*\" in\n  *claude.ai/install.sh*|*rtk-ai/rtk/*|*chatgpt.com/codex/install.sh*) echo 'preinstalled tools must skip their installers' >&2; exit 42;;\n  *) printf ':';;\nesac\n",
+      bun: "#!/bin/sh\nif [ \"$1\" = install ]; then echo 'preinstalled OMP must skip its installer' >&2; exit 42; fi\nexit 0\n",
       bunx: "#!/bin/sh\nmkdir -p \"$HOME/.agents/skills/archify\"\nprintf 'archify\\n' > \"$HOME/.agents/skills/archify/SKILL.md\"\n",
       gh: "#!/bin/sh\nif [ \"$1\" = auth ] && [ \"$2\" = status ]; then exit 1; fi\nexit 0\n",
       claude: "#!/bin/sh\nif [ \"$1\" = auth ] && [ \"$2\" = status ]; then exit 1; fi\nexit 0\n",
       codex: "#!/bin/sh\nif [ \"$1\" = login ] && [ \"$2\" = status ]; then exit 1; fi\nexit 0\n",
       rtk: "#!/bin/sh\nexit 0\n",
+      omp: "#!/bin/sh\nexit 0\n",
     };
     for (const [name, contents] of Object.entries(stubs)) {
       const path = join(stubBin, name);
@@ -358,6 +359,42 @@ test("runs pre-login post-create successfully while still installing auth-free A
   });
 });
 
+
+test("reinstalls RTK when the existing binary fails the RTK identity check", async () => {
+  await withTemporaryParent(async (parent) => {
+    const home = join(parent, "home");
+    const stubBin = join(home, ".local", "bin");
+    const marker = join(parent, "rtk-installer-ran");
+    await mkdir(stubBin, { recursive: true });
+
+    const stubs: Record<string, string> = {
+      claude: "#!/bin/sh\nexit 0\n",
+      codex: "#!/bin/sh\nexit 0\n",
+      omp: "#!/bin/sh\nexit 0\n",
+      rtk: "#!/bin/sh\nif [ \"$1\" = gain ]; then exit 1; fi\nexit 0\n",
+      curl: "#!/bin/sh\ncase \"$*\" in\n  *rtk-ai/rtk/*) printf 'printf installed > \"$RTK_INSTALL_MARKER\"\\n';;\n  *) echo 'unexpected installer invoked' >&2; exit 42;;\nesac\n",
+      bun: "#!/bin/sh\necho 'unexpected OMP installer invoked' >&2\nexit 42\n",
+    };
+    for (const [name, contents] of Object.entries(stubs)) {
+      const path = join(stubBin, name);
+      await writeFile(path, contents);
+      await chmod(path, 0o755);
+    }
+
+    const result = await run(
+      ["bash", "-c", 'source "$1"; install_tools', "scaffold-installer", postCreatePath],
+      home,
+      {
+        HOME: home,
+        PATH: `${stubBin}:${process.env.PATH ?? ""}`,
+        RTK_INSTALL_MARKER: marker,
+      },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("==> Installing rtk");
+    expect(await readFile(marker, "utf8")).toBe("installed");
+  });
+});
 test("quotes the host-side initialize command for paths containing spaces", async () => {
   const devcontainer = await readFile(devcontainerConfigPath, "utf8");
   expect(devcontainer).toContain(
