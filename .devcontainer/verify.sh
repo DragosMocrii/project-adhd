@@ -175,7 +175,11 @@ check_codex_plugin() {
   fi
 
   if ! printf '%s' "$plugin_json" | bun -e '
-const expectedIds = new Set(["superpowers", "superpowers@openai-api-curated"]);
+const expectedIds = new Set([
+  "superpowers",
+  "superpowers@openai-curated",
+  "superpowers@openai-api-curated",
+]);
 let document;
 try {
   document = JSON.parse(await Bun.stdin.text());

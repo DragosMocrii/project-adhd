@@ -1,27 +1,30 @@
 # Agentic Bun and TypeScript
 
-This repository is a private GitHub template for a generic Bun and TypeScript project. The Dev Container provides the pinned runtime and installs the agent CLIs during first container creation.
+This repository is a GitHub template for a generic Bun and TypeScript project. The Dev Container provides the pinned runtime and installs the agent CLIs during first container creation.
 
 ## Create a project
 
-Resolve the authenticated GitHub owner and create a private repository from the template:
+Resolve the authenticated GitHub owner and create a private generated repository from the template:
 
 ```bash
 OWNER="$(gh api user --jq .login)"
-gh repo create my-project --private --template "$OWNER/agentic-bun-devcontainer" --clone
+gh repo create my-project --private --template "$OWNER/project-adhd" --clone
 cd my-project
 ```
 
-Open the clone in VS Code (`code .`) and run **Dev Containers: Reopen in Container**. The first creation runs the post-create bootstrap and installs Bun tooling, Claude Code, Codex, OMP, RTK, and their integrations. Each project receives isolated persistent volumes, so complete these one-time sign-ins and provider setup steps inside the new container:
+Open the clone in VS Code (`code .`) and run **Dev Containers: Reopen in Container**. The first creation installs Bun tooling, Claude Code, Codex, OMP, RTK, and Archify. On a fresh clone, Claude and Codex have no login yet, so post-create deliberately skips auth-dependent Superpowers plugin setup and exits successfully after printing the deferred setup instructions. Archify is still installed during this first run.
+
+After the first run, authenticate each project and rerun the post-create bootstrap before verification:
 
 ```bash
 gh auth login
 claude auth login
 codex login
-omp
+bash .devcontainer/post-create.sh
+.devcontainer/verify.sh
 ```
 
-Complete OMP provider setup when its first-run prompt appears. Credentials and configuration stay in this project's state volumes; they are not shared with another generated project.
+The rerun installs or enables Superpowers through each CLI's native mechanism, including Codex's reserved `openai-curated` marketplace. Complete the OMP provider setup if OMP asks for it after authentication. Credentials and configuration stay in this project's state volumes; they are not shared with another generated project.
 
 ## Worktrees and persistent state
 
@@ -31,7 +34,7 @@ Create project-local linked worktrees with:
 git worktree add .worktrees/feature-example -b feature/example
 ```
 
-The generated `.devcontainer/.env` derives `PROJECT_STATE_PREFIX` from the repository name and canonical Git common directory. Linked worktrees share that Git common directory, so they share the same Claude, GitHub CLI, RTK, Codex, and OMP state volumes while remaining separate from unrelated repositories.
+The generated `.devcontainer/.env` derives `PROJECT_STATE_PREFIX` from the repository name and canonical Git common directory. The selected valid prefix is also persisted in the canonical Git common directory. Linked worktrees therefore reuse it, including a newly created worktree after the repository is moved. Existing valid prefixes are preserved; conflicting canonical/worktree prefixes fail instead of silently switching volumes.
 
 The local environment files are:
 

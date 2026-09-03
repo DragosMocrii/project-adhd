@@ -242,7 +242,11 @@ parse_codex_plugin_state() {
   local plugin_json="$1"
 
   printf '%s' "$plugin_json" | bun -e '
-const expectedIds = new Set(["superpowers", "superpowers@openai-api-curated"]);
+const expectedIds = new Set([
+  "superpowers",
+  "superpowers@openai-curated",
+  "superpowers@openai-api-curated",
+]);
 let document;
 
 try {
@@ -267,7 +271,11 @@ function collectEntries(value) {
 
   if (entries.length === 0) {
     for (const [key, child] of Object.entries(value)) {
-      if (key === "superpowers" || key === "superpowers@openai-api-curated") {
+      if (
+        key === "superpowers" ||
+        key === "superpowers@openai-curated" ||
+        key === "superpowers@openai-api-curated"
+      ) {
         entries.push(
           child && typeof child === "object" && !Array.isArray(child)
             ? { ...child, id: key }
@@ -305,9 +313,108 @@ process.stdout.write(`${installed ? "installed" : "missing"}\n`);
 '
 }
 
+parse_codex_marketplace_name() {
+  local marketplace_json="$1"
+
+  printf '%s' "$marketplace_json" | bun -e '
+const supportedNames = new Set(["openai-curated", "openai-api-curated"]);
+let document;
+
+try {
+  document = JSON.parse(await Bun.stdin.text());
+} catch (error) {
+  console.error(`Unable to parse Codex marketplace list JSON: ${error instanceof Error ? error.message : String(error)}`);
+  process.exit(1);
+}
+
+function collectEntries(value) {
+  if (Array.isArray(value)) return value.flatMap(collectEntries);
+  if (!value || typeof value !== "object") return [];
+
+  const entries = [];
+  for (const key of ["marketplaces", "items", "data"]) {
+    if (key in value) entries.push(...collectEntries(value[key]));
+  }
+
+  if (
+    typeof value.name === "string" ||
+    typeof value.id === "string" ||
+    typeof value.marketplace === "string" ||
+    typeof value.slug === "string"
+  ) {
+    entries.push(value);
+  }
+
+  if (entries.length === 0) {
+    for (const [key, child] of Object.entries(value)) {
+      if (supportedNames.has(key)) {
+        entries.push(
+          child && typeof child === "object" && !Array.isArray(child)
+            ? { ...child, name: key }
+            : { name: key },
+        );
+      }
+    }
+  }
+
+  return entries;
+}
+
+function identifiers(entry) {
+  if (typeof entry === "string") return [entry];
+  if (!entry || typeof entry !== "object") return [];
+  return [entry.name, entry.id, entry.marketplace, entry.slug]
+    .filter((value) => typeof value === "string");
+}
+
+function isPreferred(entry) {
+  if (!entry || typeof entry !== "object") return false;
+  return ["active", "default", "isActive", "isDefault", "current", "selected"]
+    .some((key) => entry[key] === true || entry[key] === "true" || entry[key] === 1);
+}
+
+let selected;
+let selectedScore = -1;
+for (const entry of collectEntries(document)) {
+  const name = identifiers(entry).find((identifier) => supportedNames.has(identifier));
+  if (!name) continue;
+
+  const score = (isPreferred(entry) ? 2 : 0) + (name === "openai-curated" ? 1 : 0);
+  if (score > selectedScore) {
+    selected = name;
+    selectedScore = score;
+  }
+}
+
+if (!selected) {
+  console.error("No supported official Codex marketplace is exposed");
+  process.exit(1);
+}
+process.stdout.write(`${selected}\n`);
+'
+}
+
+defer_superpowers_setup() {
+  echo '==> Superpowers setup deferred until Claude and Codex authentication is available'
+  echo '    Run gh auth login, claude auth login, and codex login, then rerun: bash .devcontainer/post-create.sh'
+}
 configure_superpowers() {
   local claude_plugins claude_state claude_marketplaces marketplace_state
-  local install_path codex_plugins codex_state
+  local install_path codex_plugins codex_state codex_marketplaces codex_marketplace
+
+  if ! claude auth status >/dev/null 2>&1 || ! codex login status >/dev/null 2>&1; then
+    defer_superpowers_setup
+    return 0
+  fi
+
+  echo '==> Enabling Codex plugins'
+  codex features enable plugins
+  if ! codex_marketplaces="$(codex plugin marketplace list --json)"; then
+    die 'Unable to list Codex marketplaces'
+  fi
+  if ! codex_marketplace="$(parse_codex_marketplace_name "$codex_marketplaces")"; then
+    die 'No supported official Codex marketplace is available'
+  fi
 
   echo '==> Checking Claude Superpowers plugin'
   if ! claude_plugins="$(claude plugin list --json)"; then
@@ -368,8 +475,7 @@ configure_superpowers() {
     installed)
       ;;
     missing)
-      codex plugin marketplace upgrade openai-api-curated
-      codex plugin add superpowers@openai-api-curated --json
+      codex plugin add superpowers@$codex_marketplace --json
       ;;
     *)
       die "Unexpected Codex Superpowers state: $codex_state"
