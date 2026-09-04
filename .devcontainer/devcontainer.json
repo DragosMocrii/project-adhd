@@ -31,7 +31,8 @@
   "remoteUser": "vscode",
   "containerEnv": {
     "CLAUDE_CONFIG_DIR": "/home/vscode/.claude",
-    "LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}"
+    "LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}",
+    "NO_BROWSER": "true"
   },
   "remoteEnv": {
     "PATH": "/home/vscode/.bun/bin:/home/vscode/.local/bin:${containerEnv:PATH}"
