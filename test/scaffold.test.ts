@@ -646,6 +646,7 @@ test("renders one Compose workspace with seven explicit state volumes and no pub
 test("documents executable template setup and state conventions", async () => {
   const readme = await readFile(join(scaffoldRoot, "README.md"), "utf8");
   for (const required of [
+    "python3",
     'OWNER="$(gh api user --jq .login)"',
     'gh repo create my-project --private --template "$OWNER/project-adhd" --clone',
     "git worktree add .worktrees/feature-example -b feature/example",
