@@ -66,6 +66,29 @@ configure_github_auth() {
   fi
 }
 
+trust_omp_dependencies() {
+  local untrusted
+
+  if ! untrusted="$(bun pm -g untrusted 2>&1)"; then
+    printf 'post-create: unable to query untrusted Bun dependencies:\n%s\n' "$untrusted" >&2
+    return 1
+  fi
+  case "$untrusted" in
+    *onnxruntime-node*) bun pm -g trust onnxruntime-node ;;
+  esac
+  case "$untrusted" in
+    *protobufjs*) bun pm -g trust protobufjs ;;
+  esac
+
+  if ! untrusted="$(bun pm -g untrusted 2>&1)"; then
+    printf 'post-create: unable to query untrusted Bun dependencies:\n%s\n' "$untrusted" >&2
+    return 1
+  fi
+  case "$untrusted" in
+    *sharp*) bun pm -g trust sharp ;;
+  esac
+}
+
 install_tools() {
   if command -v claude >/dev/null 2>&1; then
     echo '==> Claude Code is already installed; skipping Claude installer'
@@ -92,7 +115,7 @@ install_tools() {
     echo '==> Gemini CLI is already installed; skipping Gemini installer'
   else
     echo '==> Installing Gemini CLI'
-    npm install -g @google/gemini-cli
+    npm install -g --allow-scripts=@github/keytar @google/gemini-cli
   fi
 
   if command -v omp >/dev/null 2>&1; then
@@ -101,6 +124,9 @@ install_tools() {
     echo '==> Installing omp (Oh My Pi)'
     bun install -g @oh-my-pi/pi-coding-agent
   fi
+
+  echo '==> Trusting OMP runtime dependencies'
+  trust_omp_dependencies
 }
 
 configure_rtk() {
