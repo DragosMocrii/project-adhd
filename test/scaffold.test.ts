@@ -367,6 +367,8 @@ test("installs Gemini CLI globally when the command is missing", async () => {
     const home = join(parent, "home");
     const stubBin = join(home, ".local", "bin");
     const marker = join(parent, "gemini-install-args");
+    const trustMarker = join(parent, "omp-trust-args");
+    const trustStage = join(parent, "omp-trust-stage");
     await mkdir(stubBin, { recursive: true });
 
     const stubs: Record<string, string> = {
@@ -375,6 +377,7 @@ test("installs Gemini CLI globally when the command is missing", async () => {
       omp: "#!/bin/sh\nexit 0\n",
       rtk: "#!/bin/sh\nexit 0\n",
       npm: "#!/bin/sh\nprintf '%s|%s' \"$NPM_CONFIG_PREFIX\" \"$*\" > \"$GEMINI_INSTALL_MARKER\"\n",
+      bun: "#!/bin/sh\ncase \"$*\" in\n  'pm -g untrusted')\n    if [ -f \"$OMP_TRUST_STAGE\" ]; then printf 'sharp\\n'; else printf 'onnxruntime-node\\nprotobufjs\\n'; fi\n    ;;\n  *)\n    printf '%s\\n' \"$*\" >> \"$OMP_TRUST_MARKER\"\n    : > \"$OMP_TRUST_STAGE\"\n    ;;\nesac\n",
     };
     for (const [name, contents] of Object.entries(stubs)) {
       const path = join(stubBin, name);
@@ -389,14 +392,44 @@ test("installs Gemini CLI globally when the command is missing", async () => {
         HOME: home,
         PATH: stubBin,
         GEMINI_INSTALL_MARKER: marker,
+        OMP_TRUST_MARKER: trustMarker,
+        OMP_TRUST_STAGE: trustStage,
       },
     );
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("==> Installing Gemini CLI");
-    expect(await readFile(marker, "utf8")).toBe(`${join(home, ".local")}|install -g @google/gemini-cli`);
+    expect(await readFile(marker, "utf8")).toBe(
+      `${join(home, ".local")}|install -g --allow-scripts=@github/keytar @google/gemini-cli`,
+    );
+    expect(await readFile(trustMarker, "utf8")).toBe(
+      "pm -g trust onnxruntime-node\npm -g trust protobufjs\npm -g trust sharp\n",
+    );
   });
 });
 
+test("reports Bun trust query failures", async () => {
+  await withTemporaryParent(async (parent) => {
+    const home = join(parent, "home");
+    const stubBin = join(home, ".local", "bin");
+    await mkdir(stubBin, { recursive: true });
+
+    const bunPath = join(stubBin, "bun");
+    await writeFile(
+      bunPath,
+      "#!/bin/sh\nif [ \"$*\" = 'pm -g untrusted' ]; then printf 'global store unavailable\\n' >&2; exit 17; fi\nexit 0\n",
+    );
+    await chmod(bunPath, 0o755);
+
+    const result = await run(
+      ["/bin/bash", "-c", 'source "$1"; trust_omp_dependencies', "scaffold-installer", postCreatePath],
+      home,
+      { HOME: home, PATH: stubBin },
+    );
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("unable to query untrusted Bun dependencies");
+    expect(result.stderr).toContain("global store unavailable");
+  });
+});
 
 test("reinstalls RTK when the existing binary fails the RTK identity check", async () => {
   await withTemporaryParent(async (parent) => {
@@ -412,7 +445,7 @@ test("reinstalls RTK when the existing binary fails the RTK identity check", asy
       gemini: "#!/bin/sh\nexit 0\n",
       rtk: "#!/bin/sh\nif [ \"$1\" = gain ]; then exit 1; fi\nexit 0\n",
       curl: "#!/bin/sh\ncase \"$*\" in\n  *rtk-ai/rtk/*) printf 'printf installed > \"$RTK_INSTALL_MARKER\"\\n';;\n  *) echo 'unexpected installer invoked' >&2; exit 42;;\nesac\n",
-      bun: "#!/bin/sh\necho 'unexpected OMP installer invoked' >&2\nexit 42\n",
+      bun: "#!/bin/sh\nif [ \"$1\" = pm ]; then exit 0; fi\necho 'unexpected OMP installer invoked' >&2\nexit 42\n",
     };
     for (const [name, contents] of Object.entries(stubs)) {
       const path = join(stubBin, name);
