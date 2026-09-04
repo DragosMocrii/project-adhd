@@ -383,11 +383,11 @@ test("installs Gemini CLI globally when the command is missing", async () => {
     }
 
     const result = await run(
-      ["bash", "-c", 'source "$1"; install_tools', "scaffold-installer", postCreatePath],
+      ["/bin/bash", "-c", 'source "$1"; install_tools', "scaffold-installer", postCreatePath],
       home,
       {
         HOME: home,
-        PATH: `${stubBin}:${process.env.PATH ?? ""}`,
+        PATH: stubBin,
         GEMINI_INSTALL_MARKER: marker,
       },
     );
@@ -641,6 +641,13 @@ test("renders one Compose workspace with seven explicit state volumes and no pub
         .sort(),
     ).toEqual(Object.keys(expectedVolumes).sort());
   });
+});
+
+test("configures Gemini CLI for manual authentication", async () => {
+  const config = JSON.parse(await readFile(devcontainerConfigPath, "utf8")) as {
+    containerEnv?: Record<string, string>;
+  };
+  expect(config.containerEnv?.NO_BROWSER).toBe("true");
 });
 
 test("documents executable template setup and state conventions", async () => {
