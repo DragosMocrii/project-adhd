@@ -3,6 +3,7 @@ set -euo pipefail
 
 CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 export CLAUDE_CONFIG_DIR
+export NPM_CONFIG_PREFIX="$HOME/.local"
 export PATH="$HOME/.bun/bin:$HOME/.local/bin:${PATH:-}"
 
 readonly -a STATE_ROOTS=(
@@ -11,6 +12,7 @@ readonly -a STATE_ROOTS=(
   "$HOME/.config/rtk"
   "$HOME/.local/share/rtk"
   "$HOME/.codex"
+  "$HOME/.gemini"
   "$HOME/.omp"
 )
 readonly -a INSTALLER_ROOTS=(
@@ -84,6 +86,13 @@ install_tools() {
   else
     echo '==> Installing codex'
     curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh
+  fi
+
+  if command -v gemini >/dev/null 2>&1; then
+    echo '==> Gemini CLI is already installed; skipping Gemini installer'
+  else
+    echo '==> Installing Gemini CLI'
+    npm install -g @google/gemini-cli
   fi
 
   if command -v omp >/dev/null 2>&1; then

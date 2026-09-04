@@ -12,9 +12,9 @@ gh repo create my-project --private --template "$OWNER/project-adhd" --clone
 cd my-project
 ```
 
-Open the clone in VS Code (`code .`) and run **Dev Containers: Reopen in Container**. The first creation installs Bun tooling, Claude Code, Codex, OMP, RTK, and Archify. On a fresh clone, Claude and Codex have no login yet, so post-create deliberately skips auth-dependent Superpowers plugin setup and exits successfully after printing the deferred setup instructions. Archify is still installed during this first run.
+Open the clone in VS Code (`code .`) and run **Dev Containers: Reopen in Container**. The first creation installs Bun tooling, Claude Code, Codex, Gemini CLI, OMP, RTK, and Archify. On a fresh clone, Claude and Codex have no login yet, so post-create deliberately skips auth-dependent Superpowers plugin setup and exits successfully after printing the deferred setup instructions. Archify is still installed during this first run.
 
-After the first run, authenticate each project and rerun the post-create bootstrap before verification:
+After the first run, authenticate each project and rerun the post-create bootstrap before verification. Start `gemini` once and complete its sign-in flow, then:
 
 ```bash
 gh auth login
@@ -42,13 +42,14 @@ The local environment files are:
 - `.devcontainer/devcontainer.env` — ignored per-project secrets file; initialize it with local values such as `CONTEXT7_API_KEY`.
 - `.devcontainer/.env` — ignored, generated Compose identity containing exactly `PROJECT_STATE_PREFIX=<slug>-<8-hex-id>`.
 
-Compose gives the six persistent volumes explicit names based on that prefix:
+Compose gives the seven persistent volumes explicit names based on that prefix:
 
 - `${PROJECT_STATE_PREFIX}-claude`
 - `${PROJECT_STATE_PREFIX}-gh`
 - `${PROJECT_STATE_PREFIX}-rtk-config`
 - `${PROJECT_STATE_PREFIX}-rtk-data`
 - `${PROJECT_STATE_PREFIX}-codex`
+- `${PROJECT_STATE_PREFIX}-gemini`
 - `${PROJECT_STATE_PREFIX}-omp`
 
 Tool binaries are reinstalled on rebuild; authentication, plugin files, histories, and other state remain in these volumes. Do not commit either ignored local environment file.

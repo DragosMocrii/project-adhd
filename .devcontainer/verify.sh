@@ -380,7 +380,7 @@ check_rtk() {
 
 main() {
   local command_name
-  for command_name in bun node gh claude codex omp rtk; do
+  for command_name in bun node gh claude codex gemini omp rtk; do
     require_command "$command_name"
   done
 

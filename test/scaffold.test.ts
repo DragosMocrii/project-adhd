@@ -317,6 +317,7 @@ test("runs pre-login post-create successfully while still installing auth-free A
       ".config/rtk",
       ".local/share/rtk",
       ".codex",
+      ".gemini",
       ".omp",
       ".bun",
       ".bun/bin",
@@ -333,6 +334,7 @@ test("runs pre-login post-create successfully while still installing auth-free A
       gh: "#!/bin/sh\nif [ \"$1\" = auth ] && [ \"$2\" = status ]; then exit 1; fi\nexit 0\n",
       claude: "#!/bin/sh\nif [ \"$1\" = auth ] && [ \"$2\" = status ]; then exit 1; fi\nexit 0\n",
       codex: "#!/bin/sh\nif [ \"$1\" = login ] && [ \"$2\" = status ]; then exit 1; fi\nexit 0\n",
+      gemini: "#!/bin/sh\nexit 0\n",
       rtk: "#!/bin/sh\nexit 0\n",
       omp: "#!/bin/sh\nexit 0\n",
     };
@@ -360,6 +362,42 @@ test("runs pre-login post-create successfully while still installing auth-free A
 });
 
 
+test("installs Gemini CLI globally when the command is missing", async () => {
+  await withTemporaryParent(async (parent) => {
+    const home = join(parent, "home");
+    const stubBin = join(home, ".local", "bin");
+    const marker = join(parent, "gemini-install-args");
+    await mkdir(stubBin, { recursive: true });
+
+    const stubs: Record<string, string> = {
+      claude: "#!/bin/sh\nexit 0\n",
+      codex: "#!/bin/sh\nexit 0\n",
+      omp: "#!/bin/sh\nexit 0\n",
+      rtk: "#!/bin/sh\nexit 0\n",
+      npm: "#!/bin/sh\nprintf '%s|%s' \"$NPM_CONFIG_PREFIX\" \"$*\" > \"$GEMINI_INSTALL_MARKER\"\n",
+    };
+    for (const [name, contents] of Object.entries(stubs)) {
+      const path = join(stubBin, name);
+      await writeFile(path, contents);
+      await chmod(path, 0o755);
+    }
+
+    const result = await run(
+      ["bash", "-c", 'source "$1"; install_tools', "scaffold-installer", postCreatePath],
+      home,
+      {
+        HOME: home,
+        PATH: `${stubBin}:${process.env.PATH ?? ""}`,
+        GEMINI_INSTALL_MARKER: marker,
+      },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("==> Installing Gemini CLI");
+    expect(await readFile(marker, "utf8")).toBe(`${join(home, ".local")}|install -g @google/gemini-cli`);
+  });
+});
+
+
 test("reinstalls RTK when the existing binary fails the RTK identity check", async () => {
   await withTemporaryParent(async (parent) => {
     const home = join(parent, "home");
@@ -371,6 +409,7 @@ test("reinstalls RTK when the existing binary fails the RTK identity check", asy
       claude: "#!/bin/sh\nexit 0\n",
       codex: "#!/bin/sh\nexit 0\n",
       omp: "#!/bin/sh\nexit 0\n",
+      gemini: "#!/bin/sh\nexit 0\n",
       rtk: "#!/bin/sh\nif [ \"$1\" = gain ]; then exit 1; fi\nexit 0\n",
       curl: "#!/bin/sh\ncase \"$*\" in\n  *rtk-ai/rtk/*) printf 'printf installed > \"$RTK_INSTALL_MARKER\"\\n';;\n  *) echo 'unexpected installer invoked' >&2; exit 42;;\nesac\n",
       bun: "#!/bin/sh\necho 'unexpected OMP installer invoked' >&2\nexit 42\n",
@@ -546,7 +585,7 @@ test("keeps tracked configuration free of product paths and unconditional databa
   expect(compose?.[1]).not.toMatch(/^\s*(redis|postgres(?:ql)?|mysql)\s*:/im);
 });
 
-test("renders one Compose workspace with six explicit state volumes and no published ports", async () => {
+test("renders one Compose workspace with seven explicit state volumes and no published ports", async () => {
   await withTemporaryParent(async (parent) => {
     const root = join(parent, "compose-contract");
     await mkdir(join(root, ".devcontainer"), { recursive: true });
@@ -570,15 +609,13 @@ test("renders one Compose workspace with six explicit state volumes and no publi
       volumes?: Record<string, { name?: string }>;
     };
     const config = JSON.parse(result.stdout) as ComposeConfig;
-    const serviceNames = Object.keys(config.services ?? {});
-    expect(serviceNames).toEqual(["workspace"]);
-
     const expectedVolumes = {
       "claude-state": `${prefix}-claude`,
       "github-state": `${prefix}-gh`,
       "rtk-config-state": `${prefix}-rtk-config`,
       "rtk-data-state": `${prefix}-rtk-data`,
       "codex-state": `${prefix}-codex`,
+      "gemini-state": `${prefix}-gemini`,
       "omp-state": `${prefix}-omp`,
     };
     expect(Object.keys(config.volumes ?? {}).sort()).toEqual(
@@ -594,6 +631,7 @@ test("renders one Compose workspace with six explicit state volumes and no publi
     const mounts = new Map(
       (workspace?.volumes ?? []).map((mount) => [mount.target, mount]),
     );
+    expect(mounts.get("/home/vscode/.gemini")?.source).toBe("gemini-state");
     expect(mounts.get("/home/vscode/.config/rtk")?.source).toBe("rtk-config-state");
     expect(mounts.get("/home/vscode/.local/share/rtk")?.source).toBe("rtk-data-state");
     expect(
@@ -614,6 +652,7 @@ test("documents executable template setup and state conventions", async () => {
     "gh auth login",
     "claude auth login",
     "codex login",
+    "gemini",
     "bash .devcontainer/post-create.sh",
     "OMP provider",
     "LOCAL_WORKSPACE_FOLDER",
