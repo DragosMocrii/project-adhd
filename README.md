@@ -1,6 +1,6 @@
 # Agentic Bun and TypeScript
 
-This repository is a GitHub template for a generic Bun and TypeScript project. The Dev Container provides the pinned runtime and installs the agent CLIs during first container creation.
+This repository is a GitHub template for a generic Bun and TypeScript project. The Dev Container provides the pinned runtime, includes `python3` for agent scripts and convenience utilities, and installs the agent CLIs during first container creation.
 
 ## Create a project
 
