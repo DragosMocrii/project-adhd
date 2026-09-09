@@ -715,3 +715,57 @@ test("skips OMP Superpowers when omp is selected without claude", async () => {
     expect(existsSync(join(home, ".claude/skills/archify"))).toBe(false);
   });
 });
+
+const verifyPath = join(scaffoldRoot, ".devcontainer", "verify.sh");
+
+async function runVerify(
+  parent: string,
+  stubs: Record<string, string>,
+  agentTools: string,
+): Promise<CommandResult> {
+  const home = join(parent, "home");
+  const stubBin = join(home, ".local", "bin");
+  await mkdir(stubBin, { recursive: true });
+  await mkdir(join(home, ".claude"), { recursive: true });
+  for (const [name, contents] of Object.entries(stubs)) {
+    const path = join(stubBin, name);
+    await writeFile(path, contents);
+    await chmod(path, 0o755);
+  }
+  return run(["bash", verifyPath], home, {
+    HOME: home,
+    CLAUDE_CONFIG_DIR: join(home, ".claude"),
+    AGENT_TOOLS: agentTools,
+    PATH: `${stubBin}:${process.env.PATH ?? ""}`,
+  });
+}
+
+test("verify skips checks for unselected tools and succeeds", async () => {
+  await withTemporaryParent(async (parent) => {
+    const noop = "#!/bin/sh\nexit 0\n";
+    const result = await runVerify(
+      parent,
+      { bun: noop, node: noop, python3: noop, gh: noop, rtk: noop, gemini: noop },
+      "gemini",
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("SKIP");
+    expect(result.stdout).toContain("claude not selected");
+    expect(result.stdout).toContain("skipped");
+  });
+});
+
+test("verify fails when a selected tool is missing from PATH", async () => {
+  await withTemporaryParent(async (parent) => {
+    const noop = "#!/bin/sh\nexit 0\n";
+    const result = await runVerify(
+      parent,
+      { bun: noop, node: noop, python3: noop, gh: noop, rtk: noop },
+      "codex",
+    );
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("required command is not on PATH: codex");
+  });
+});
