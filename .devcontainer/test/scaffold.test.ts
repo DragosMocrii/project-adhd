@@ -812,3 +812,12 @@ test("documents a create command that works for someone who is not the repositor
   expect(createCommandLine).toContain("--template DragosMocrii/project-adhd");
   expect(createCommandLine).not.toContain("$OWNER");
 });
+
+test("ships agent guidance that Claude and Codex both resolve", async () => {
+  const agents = await readFile(join(scaffoldRoot, "AGENTS.md"), "utf8");
+  const claude = await readFile(join(scaffoldRoot, "CLAUDE.md"), "utf8");
+
+  expect(agents).toContain("AGENT_TOOLS");
+  expect(agents).toContain(".devcontainer/");
+  expect(claude.trim()).toBe("@AGENTS.md");
+});
