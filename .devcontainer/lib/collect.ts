@@ -10,6 +10,8 @@ export const MARKETPLACE_CONTAINER_KEYS = ["marketplaces", "items", "data"] as c
 
 export const IDENTITY_KEYS = ["id", "pluginId", "name", "slug", "package", "marketplace"] as const;
 
+export const MARKETPLACE_IDENTITY_KEYS = ["name", "id", "marketplace", "slug"] as const;
+
 function hasIdentity(record: Record<string, unknown>, identityKeys: readonly string[]): boolean {
   if (identityKeys.some((key) => typeof record[key] === "string")) return true;
   const plugin = record.plugin;

@@ -1,6 +1,6 @@
 import {
-  IDENTITY_KEYS,
   MARKETPLACE_CONTAINER_KEYS,
+  MARKETPLACE_IDENTITY_KEYS,
   collectEntries,
   identifiers,
   runCli,
@@ -23,10 +23,10 @@ export function marketplaceName(document: unknown): string {
   for (const entry of collectEntries(
     document,
     MARKETPLACE_CONTAINER_KEYS,
-    IDENTITY_KEYS,
+    MARKETPLACE_IDENTITY_KEYS,
     SUPPORTED_NAMES,
   )) {
-    const name = identifiers(entry, IDENTITY_KEYS).find((identifier) =>
+    const name = identifiers(entry, MARKETPLACE_IDENTITY_KEYS).find((identifier) =>
       (SUPPORTED_NAMES as readonly string[]).includes(identifier),
     );
     if (name === undefined) continue;

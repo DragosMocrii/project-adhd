@@ -40,6 +40,11 @@ export const CODEX_PLUGINS_INSTALLED: unknown = {
 
 export const CODEX_PLUGINS_EMPTY: unknown = { installed: [], available: [] };
 
+export const CODEX_PLUGINS_INSTALLED_STATUS_AVAILABLE: unknown = {
+  installed: [{ name: "superpowers", status: "available" }],
+  available: [],
+};
+
 export const CODEX_PLUGINS_AVAILABLE_ONLY: unknown = {
   installed: [],
   available: [{ name: "superpowers", status: "available" }],
