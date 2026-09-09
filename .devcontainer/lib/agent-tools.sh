@@ -36,7 +36,7 @@ agent_tools_init() {
   fi
 
   for token in "${tokens[@]}"; do
-    token=$(printf '%s' "$token" | tr '[:upper:]' '[:lower:]')
+    token="${token,,}"
     valid=false
     for known in "${AGENT_TOOLS_KNOWN[@]}"; do
       if [[ "$token" == "$known" ]]; then

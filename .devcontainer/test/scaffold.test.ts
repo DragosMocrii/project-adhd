@@ -732,11 +732,11 @@ async function runVerify(
     await writeFile(path, contents);
     await chmod(path, 0o755);
   }
-  return run(["bash", verifyPath], home, {
+  return run(["/bin/bash", verifyPath], home, {
     HOME: home,
     CLAUDE_CONFIG_DIR: join(home, ".claude"),
     AGENT_TOOLS: agentTools,
-    PATH: `${stubBin}:${process.env.PATH ?? ""}`,
+    PATH: stubBin,
   });
 }
 
