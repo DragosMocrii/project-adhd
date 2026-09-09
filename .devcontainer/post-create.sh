@@ -144,6 +144,7 @@ parse_claude_plugin_field() {
   local field="$1"
   local plugin_json="$2"
 
+  # shellcheck disable=SC2016
   printf '%s' "$plugin_json" | CLAUDE_PLUGIN_FIELD="$field" bun -e '
 const expectedId = "superpowers@claude-plugins-official";
 const field = process.env.CLAUDE_PLUGIN_FIELD;
@@ -235,6 +236,7 @@ process.exit(1);
 parse_claude_marketplace_state() {
   local marketplace_json="$1"
 
+  # shellcheck disable=SC2016
   printf '%s' "$marketplace_json" | bun -e '
 const expectedName = "claude-plugins-official";
 let document;
@@ -292,6 +294,7 @@ process.stdout.write(`${present ? "present" : "missing"}\n`);
 parse_codex_plugin_state() {
   local plugin_json="$1"
 
+  # shellcheck disable=SC2016
   printf '%s' "$plugin_json" | bun -e '
 const expectedIds = new Set([
   "superpowers",
@@ -367,6 +370,7 @@ process.stdout.write(`${installed ? "installed" : "missing"}\n`);
 parse_codex_marketplace_name() {
   local marketplace_json="$1"
 
+  # shellcheck disable=SC2016
   printf '%s' "$marketplace_json" | bun -e '
 const supportedNames = new Set(["openai-curated", "openai-api-curated"]);
 let document;
@@ -526,7 +530,7 @@ configure_superpowers() {
     installed)
       ;;
     missing)
-      codex plugin add superpowers@$codex_marketplace --json
+      codex plugin add "superpowers@$codex_marketplace" --json
       ;;
     *)
       die "Unexpected Codex Superpowers state: $codex_state"

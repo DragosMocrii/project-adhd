@@ -23,6 +23,7 @@ check_claude_plugin() {
     fail 'claude plugin list --json failed'
   fi
 
+  # shellcheck disable=SC2016
   if ! printf '%s' "$plugin_json" | bun -e '
 const expectedId = "superpowers@claude-plugins-official";
 let document;
@@ -104,6 +105,7 @@ check_claude_settings() {
     fail "Claude settings file is missing or unreadable: $settings_path"
   fi
 
+  # shellcheck disable=SC2016
   if ! CLAUDE_SETTINGS_PATH="$settings_path" bun -e '
 let settings;
 try {
@@ -174,6 +176,7 @@ check_codex_plugin() {
     fail 'codex plugin list --json failed'
   fi
 
+  # shellcheck disable=SC2016
   if ! printf '%s' "$plugin_json" | bun -e '
 const expectedIds = new Set([
   "superpowers",
@@ -263,6 +266,7 @@ check_omp_plugin() {
     fail 'omp plugin list --json failed'
   fi
 
+  # shellcheck disable=SC2016
   if ! install_path="$(printf '%s' "$plugin_json" | bun -e '
 const expectedId = "superpowers";
 let document;
