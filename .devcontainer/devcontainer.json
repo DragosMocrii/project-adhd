@@ -1,5 +1,5 @@
 {
-  "name": "Agentic Bun and TypeScript",
+  "name": "project-adhd",
   "dockerComposeFile": "docker-compose.yml",
   "service": "workspace",
   "workspaceFolder": "/workspace",

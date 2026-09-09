@@ -769,3 +769,29 @@ test("verify fails when a selected tool is missing from PATH", async () => {
     expect(result.stderr).toContain("required command is not on PATH: codex");
   });
 });
+
+test("presents one aligned project identity and a Bun-matched types pin", async () => {
+  const packageManifest = JSON.parse(
+    await readFile(join(scaffoldRoot, ".devcontainer", "package.json"), "utf8"),
+  ) as { name?: string; devDependencies?: Record<string, string> };
+  const devcontainerConfig = JSON.parse(await readFile(devcontainerConfigPath, "utf8")) as {
+    name?: string;
+    features?: Record<string, { version?: string }>;
+  };
+
+  expect(packageManifest.name).toBe("project-adhd");
+  expect(devcontainerConfig.name).toBe("project-adhd");
+  expect(packageManifest.devDependencies?.["@types/bun"]).toBe("1.4.2");
+
+  const bunFeature = devcontainerConfig.features?.["ghcr.io/devcontainers-extra/features/bun:1"];
+  expect(bunFeature?.version).toBe("1.4.0");
+});
+
+test("documents AGENT_TOOLS in the tracked environment example", async () => {
+  const example = await readFile(
+    join(scaffoldRoot, ".devcontainer", "devcontainer.env.example"),
+    "utf8",
+  );
+  expect(example).toContain("AGENT_TOOLS");
+  expect(example).toContain("claude,codex,gemini,omp");
+});
