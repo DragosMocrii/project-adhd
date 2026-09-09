@@ -8,6 +8,9 @@ export PATH="$HOME/.bun/bin:$HOME/.local/bin:${PATH:-}"
 
 LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/lib" && pwd)"
 
+# shellcheck source=/workspace/.devcontainer/lib/agent-tools.sh
+source "$LIB_DIR/agent-tools.sh"
+
 readonly -a STATE_ROOTS=(
   "$CLAUDE_CONFIG_DIR"
   "$HOME/.config/gh"
@@ -92,11 +95,13 @@ trust_omp_dependencies() {
 }
 
 install_tools() {
-  if command -v claude >/dev/null 2>&1; then
-    echo '==> Claude Code is already installed; skipping Claude installer'
-  else
-    echo '==> Installing Claude Code'
-    curl -fsSL https://claude.ai/install.sh | bash
+  if agent_tool_selected claude; then
+    if command -v claude >/dev/null 2>&1; then
+      echo '==> Claude Code is already installed; skipping Claude installer'
+    else
+      echo '==> Installing Claude Code'
+      curl -fsSL https://claude.ai/install.sh | bash
+    fi
   fi
 
   if command -v rtk >/dev/null 2>&1 && rtk gain >/dev/null 2>&1; then
@@ -106,40 +111,54 @@ install_tools() {
     curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
   fi
 
-  if command -v codex >/dev/null 2>&1; then
-    echo '==> Codex is already installed; skipping Codex installer'
-  else
-    echo '==> Installing codex'
-    curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh
+  if agent_tool_selected codex; then
+    if command -v codex >/dev/null 2>&1; then
+      echo '==> Codex is already installed; skipping Codex installer'
+    else
+      echo '==> Installing codex'
+      curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh
+    fi
   fi
 
-  if command -v gemini >/dev/null 2>&1; then
-    echo '==> Gemini CLI is already installed; skipping Gemini installer'
-  else
-    echo '==> Installing Gemini CLI'
-    npm install -g --allow-scripts=@github/keytar @google/gemini-cli
+  if agent_tool_selected gemini; then
+    if command -v gemini >/dev/null 2>&1; then
+      echo '==> Gemini CLI is already installed; skipping Gemini installer'
+    else
+      echo '==> Installing Gemini CLI'
+      npm install -g --allow-scripts=@github/keytar @google/gemini-cli
+    fi
   fi
 
-  if command -v omp >/dev/null 2>&1; then
-    echo '==> OMP is already installed; skipping OMP installer'
-  else
-    echo '==> Installing omp (Oh My Pi)'
-    bun install -g @oh-my-pi/pi-coding-agent
-  fi
+  if agent_tool_selected omp; then
+    if command -v omp >/dev/null 2>&1; then
+      echo '==> OMP is already installed; skipping OMP installer'
+    else
+      echo '==> Installing omp (Oh My Pi)'
+      bun install -g @oh-my-pi/pi-coding-agent
+    fi
 
-  echo '==> Trusting OMP runtime dependencies'
-  trust_omp_dependencies
+    echo '==> Trusting OMP runtime dependencies'
+    trust_omp_dependencies
+  fi
 }
 
 configure_rtk() {
-  echo '==> Configuring rtk for Claude Code'
-  rtk init -g --auto-patch
+  if agent_tool_selected claude; then
+    echo '==> Configuring rtk for Claude Code'
+    rtk init -g --auto-patch
+  fi
 
-  echo '==> Configuring rtk for Codex'
-  rtk init -g --codex
+  if agent_tool_selected codex; then
+    echo '==> Configuring rtk for Codex'
+    rtk init -g --codex
+  fi
 
-  echo '==> Configuring rtk for OMP'
-  PI_CODING_AGENT_DIR="$HOME/.omp/agent" rtk init -g --agent pi
+  if agent_tool_selected omp; then
+    echo '==> Configuring rtk for OMP'
+    PI_CODING_AGENT_DIR="$HOME/.omp/agent" rtk init -g --agent pi
+  fi
+
+  # Gemini CLI has no rtk integration today. This is intentional, not an omission.
 }
 
 parse_claude_plugin_field() {
@@ -167,27 +186,10 @@ parse_codex_marketplace_name() {
   printf '%s' "$marketplace_json" | bun "$LIB_DIR/codex-marketplaces.ts" name
 }
 
-defer_superpowers_setup() {
-  echo '==> Superpowers setup deferred until Claude and Codex authentication is available'
-  echo '    Run gh auth login, claude auth login, and codex login, then rerun: bash .devcontainer/post-create.sh'
-}
-configure_superpowers() {
-  local claude_plugins claude_state claude_marketplaces marketplace_state
-  local install_path codex_plugins codex_state codex_marketplaces codex_marketplace
+CLAUDE_SUPERPOWERS_INSTALL_PATH=""
 
-  if ! claude auth status >/dev/null 2>&1 || ! codex login status >/dev/null 2>&1; then
-    defer_superpowers_setup
-    return 0
-  fi
-
-  echo '==> Enabling Codex plugins'
-  codex features enable plugins
-  if ! codex_marketplaces="$(codex plugin marketplace list --json)"; then
-    die 'Unable to list Codex marketplaces'
-  fi
-  if ! codex_marketplace="$(parse_codex_marketplace_name "$codex_marketplaces")"; then
-    die 'No supported official Codex marketplace is available'
-  fi
+configure_claude_superpowers() {
+  local claude_plugins claude_state claude_marketplaces marketplace_state install_path
 
   echo '==> Checking Claude Superpowers plugin'
   if ! claude_plugins="$(claude plugin list --json)"; then
@@ -235,6 +237,20 @@ configure_superpowers() {
     die 'Unable to find Claude Superpowers installPath'
   fi
   [[ -n "$install_path" ]] || die 'Claude Superpowers installPath is empty'
+  CLAUDE_SUPERPOWERS_INSTALL_PATH="$install_path"
+}
+
+configure_codex_superpowers() {
+  local codex_marketplaces codex_marketplace codex_plugins codex_state
+
+  echo '==> Enabling Codex plugins'
+  codex features enable plugins
+  if ! codex_marketplaces="$(codex plugin marketplace list --json)"; then
+    die 'Unable to list Codex marketplaces'
+  fi
+  if ! codex_marketplace="$(parse_codex_marketplace_name "$codex_marketplaces")"; then
+    die 'No supported official Codex marketplace is available'
+  fi
 
   echo '==> Checking Codex Superpowers plugin'
   if ! codex_plugins="$(codex plugin list --json)"; then
@@ -254,24 +270,80 @@ configure_superpowers() {
       die "Unexpected Codex Superpowers state: $codex_state"
       ;;
   esac
+}
 
-  echo '==> Installing Claude Superpowers package into OMP'
-  omp install "$install_path" --scope user --force --json
+configure_superpowers() {
+  local deferred=0
+
+  CLAUDE_SUPERPOWERS_INSTALL_PATH=""
+
+  if agent_tool_selected claude; then
+    if claude auth status >/dev/null 2>&1; then
+      configure_claude_superpowers
+    else
+      echo '==> Superpowers setup deferred for claude - run: claude auth login'
+      deferred=$((deferred + 1))
+    fi
+  fi
+
+  if agent_tool_selected codex; then
+    if codex login status >/dev/null 2>&1; then
+      configure_codex_superpowers
+    else
+      echo '==> Superpowers setup deferred for codex - run: codex login'
+      deferred=$((deferred + 1))
+    fi
+  fi
+
+  if agent_tool_selected omp; then
+    if [[ -n "$CLAUDE_SUPERPOWERS_INSTALL_PATH" ]]; then
+      echo '==> Installing Claude Superpowers package into OMP'
+      omp install "$CLAUDE_SUPERPOWERS_INSTALL_PATH" --scope user --force --json
+    else
+      echo '==> Skipping OMP Superpowers: requires claude in AGENT_TOOLS and an authenticated Claude'
+    fi
+  fi
+
+  if (( deferred > 0 )); then
+    echo '    After authenticating, rerun: bash .devcontainer/post-create.sh'
+  fi
 }
 
 install_archify() {
   local source="$HOME/.agents/skills/archify"
   local destination
+  local -a agents=() destinations=()
 
-  echo '==> Installing the archify skill (claude-code, codex)'
-  bunx skills@latest add tt-a1i/archify -g -y --copy --agent claude-code codex </dev/null
+  if agent_tool_selected claude; then
+    agents+=(claude-code)
+    destinations+=("$CLAUDE_CONFIG_DIR/skills/archify")
+  fi
+  if agent_tool_selected codex; then
+    agents+=(codex)
+    destinations+=("$HOME/.codex/skills/archify")
+  fi
+  if agent_tool_selected omp; then
+    destinations+=("$HOME/.omp/agent/skills/archify")
+  fi
+
+  if (( ${#destinations[@]} == 0 )); then
+    echo '==> Skipping archify: no agent with an archify destination is selected'
+    return 0
+  fi
+
+  if (( ${#agents[@]} == 0 )); then
+    # Only omp is selected. The skills CLI still needs an agent target to
+    # materialize "$source"; claude-code serves purely as that source and
+    # only the OMP destination is populated below.
+    agents=(claude-code)
+  fi
+
+  echo "==> Installing the archify skill (${agents[*]})"
+  bunx skills@latest add tt-a1i/archify -g -y --copy --agent "${agents[@]}" </dev/null
 
   [[ -d "$source" ]] || die "Archify skill source is missing: $source"
 
-  for destination in \
-    "$CLAUDE_CONFIG_DIR/skills/archify" \
-    "$HOME/.codex/skills/archify" \
-    "$HOME/.omp/agent/skills/archify"; do
+  for destination in "${destinations[@]}"; do
     mkdir -p "$(dirname "$destination")"
     rm -rf -- "$destination"
     cp -a -- "$source" "$destination"
@@ -279,6 +351,8 @@ install_archify() {
 }
 
 main() {
+  agent_tools_init
+  printf '==> Selected agent tools: %s\n' "$(agent_tools_summary)"
   repair_state_ownership
   repair_installer_ownership
   configure_github_auth

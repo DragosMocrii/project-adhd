@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import {
   chmod,
   copyFile,
@@ -299,6 +300,8 @@ test("runs pre-login post-create successfully while still installing auth-free A
     });
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Superpowers setup deferred");
+    expect(result.stdout).toContain("deferred for claude");
+    expect(result.stdout).toContain("deferred for codex");
     expect(result.stdout).toContain("bash .devcontainer/post-create.sh");
     for (const destination of [
       join(home, ".claude/skills/archify/SKILL.md"),
@@ -335,11 +338,11 @@ test("installs Gemini CLI globally when the command is missing", async () => {
     }
 
     const result = await run(
-      ["/bin/bash", "-c", 'source "$1"; install_tools', "scaffold-installer", postCreatePath],
+      ["/bin/bash", "-c", 'source "$1"; agent_tools_init; install_tools', "scaffold-installer", postCreatePath],
       home,
       {
         HOME: home,
-        PATH: stubBin,
+        PATH: `${stubBin}:/usr/bin:/bin`,
         GEMINI_INSTALL_MARKER: marker,
         OMP_TRUST_MARKER: trustMarker,
         OMP_TRUST_STAGE: trustStage,
@@ -372,7 +375,7 @@ test("reports Bun trust query failures", async () => {
     const result = await run(
       ["/bin/bash", "-c", 'source "$1"; trust_omp_dependencies', "scaffold-installer", postCreatePath],
       home,
-      { HOME: home, PATH: stubBin },
+      { HOME: home, PATH: `${stubBin}:${process.env.PATH ?? ""}` },
     );
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toContain("unable to query untrusted Bun dependencies");
@@ -599,4 +602,116 @@ test("configures Gemini CLI for manual authentication", async () => {
     containerEnv?: Record<string, string>;
   };
   expect(config.containerEnv?.NO_BROWSER).toBe("true");
+});
+
+test("installs and configures only the selected agent tool", async () => {
+  await withTemporaryParent(async (parent) => {
+    const home = join(parent, "home");
+    const stubBin = join(home, ".local", "bin");
+    const npmMarker = join(parent, "npm-invoked");
+    await mkdir(stubBin, { recursive: true });
+    for (const directory of [
+      ".claude",
+      ".config/gh",
+      ".config/rtk",
+      ".local/share/rtk",
+      ".codex",
+      ".gemini",
+      ".omp",
+      ".bun",
+      ".bun/bin",
+      ".bun/install",
+      ".bun/install/global",
+    ]) {
+      await mkdir(join(home, directory), { recursive: true });
+    }
+
+    // No codex, gemini, or omp stubs: if gating leaks, their installers run
+    // and the curl/npm stubs below fail the run.
+    const stubs: Record<string, string> = {
+      curl: "#!/bin/sh\necho 'no installer may run for an unselected tool' >&2\nexit 42\n",
+      npm: `#!/bin/sh\nprintf '%s\\n' "$*" > ${JSON.stringify(npmMarker)}\nexit 42\n`,
+      bun: "#!/bin/sh\nif [ \"$1\" = install ]; then echo 'omp installer must not run' >&2; exit 42; fi\nexit 0\n",
+      bunx: "#!/bin/sh\nmkdir -p \"$HOME/.agents/skills/archify\"\nprintf 'archify\\n' > \"$HOME/.agents/skills/archify/SKILL.md\"\n",
+      gh: "#!/bin/sh\nif [ \"$1\" = auth ] && [ \"$2\" = status ]; then exit 1; fi\nexit 0\n",
+      claude: "#!/bin/sh\nif [ \"$1\" = auth ] && [ \"$2\" = status ]; then exit 1; fi\nexit 0\n",
+      rtk: "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$HOME/rtk-args\"\nexit 0\n",
+    };
+    for (const [name, contents] of Object.entries(stubs)) {
+      const path = join(stubBin, name);
+      await writeFile(path, contents);
+      await chmod(path, 0o755);
+    }
+
+    const result = await run(["bash", postCreatePath], home, {
+      HOME: home,
+      CLAUDE_CONFIG_DIR: join(home, ".claude"),
+      AGENT_TOOLS: "claude",
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Superpowers setup deferred");
+    expect(result.stdout).toContain("deferred for claude");
+    expect(result.stdout).not.toContain("deferred for codex");
+    expect(result.stdout).toContain("bash .devcontainer/post-create.sh");
+    expect(existsSync(npmMarker)).toBe(false);
+    expect(await readFile(join(home, ".claude/skills/archify/SKILL.md"), "utf8")).toBe("archify\n");
+    expect(existsSync(join(home, ".codex/skills/archify"))).toBe(false);
+    expect(existsSync(join(home, ".omp/agent/skills/archify"))).toBe(false);
+
+    const rtkArguments = await readFile(join(home, "rtk-args"), "utf8");
+    expect(rtkArguments).toContain("--auto-patch");
+    expect(rtkArguments).not.toContain("--codex");
+    expect(rtkArguments).not.toContain("--agent pi");
+  });
+});
+
+test("skips OMP Superpowers when omp is selected without claude", async () => {
+  await withTemporaryParent(async (parent) => {
+    const home = join(parent, "home");
+    const stubBin = join(home, ".local", "bin");
+    await mkdir(stubBin, { recursive: true });
+    for (const directory of [
+      ".claude",
+      ".config/gh",
+      ".config/rtk",
+      ".local/share/rtk",
+      ".codex",
+      ".gemini",
+      ".omp",
+      ".bun",
+      ".bun/bin",
+      ".bun/install",
+      ".bun/install/global",
+    ]) {
+      await mkdir(join(home, directory), { recursive: true });
+    }
+
+    const stubs: Record<string, string> = {
+      curl: "#!/bin/sh\necho 'no installer may run for an unselected tool' >&2\nexit 42\n",
+      bun: "#!/bin/sh\nexit 0\n",
+      bunx: "#!/bin/sh\nmkdir -p \"$HOME/.agents/skills/archify\"\nprintf 'archify\\n' > \"$HOME/.agents/skills/archify/SKILL.md\"\n",
+      gh: "#!/bin/sh\nif [ \"$1\" = auth ] && [ \"$2\" = status ]; then exit 1; fi\nexit 0\n",
+      omp: "#!/bin/sh\nexit 0\n",
+      rtk: "#!/bin/sh\nexit 0\n",
+    };
+    for (const [name, contents] of Object.entries(stubs)) {
+      const path = join(stubBin, name);
+      await writeFile(path, contents);
+      await chmod(path, 0o755);
+    }
+
+    const result = await run(["bash", postCreatePath], home, {
+      HOME: home,
+      CLAUDE_CONFIG_DIR: join(home, ".claude"),
+      AGENT_TOOLS: "omp",
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain(
+      "Skipping OMP Superpowers: requires claude in AGENT_TOOLS and an authenticated Claude",
+    );
+    expect(await readFile(join(home, ".omp/agent/skills/archify/SKILL.md"), "utf8")).toBe("archify\n");
+    expect(existsSync(join(home, ".claude/skills/archify"))).toBe(false);
+  });
 });
