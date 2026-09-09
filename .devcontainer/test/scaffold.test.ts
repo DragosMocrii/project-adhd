@@ -804,4 +804,11 @@ test("documents a create command that works for someone who is not the repositor
   expect(readme).not.toContain('"$OWNER/project-adhd"');
   expect(readme).toContain("AGENT_TOOLS");
   expect(readme).toContain("SECURITY.md");
+
+  const createCommandLine = readme
+    .split("\n")
+    .find((line) => line.includes("gh repo create"));
+  expect(createCommandLine).toBeDefined();
+  expect(createCommandLine).toContain("--template DragosMocrii/project-adhd");
+  expect(createCommandLine).not.toContain("$OWNER");
 });
