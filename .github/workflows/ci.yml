@@ -34,4 +34,5 @@ jobs:
           shellcheck \
             .devcontainer/initialize.sh \
             .devcontainer/post-create.sh \
-            .devcontainer/verify.sh
+            .devcontainer/verify.sh \
+            .devcontainer/lib/agent-tools.sh
