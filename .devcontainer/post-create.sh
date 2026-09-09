@@ -6,6 +6,8 @@ export CLAUDE_CONFIG_DIR
 export NPM_CONFIG_PREFIX="$HOME/.local"
 export PATH="$HOME/.bun/bin:$HOME/.local/bin:${PATH:-}"
 
+LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/lib" && pwd)"
+
 readonly -a STATE_ROOTS=(
   "$CLAUDE_CONFIG_DIR"
   "$HOME/.config/gh"
@@ -144,309 +146,25 @@ parse_claude_plugin_field() {
   local field="$1"
   local plugin_json="$2"
 
-  # shellcheck disable=SC2016
-  printf '%s' "$plugin_json" | CLAUDE_PLUGIN_FIELD="$field" bun -e '
-const expectedId = "superpowers@claude-plugins-official";
-const field = process.env.CLAUDE_PLUGIN_FIELD;
-let document;
-
-try {
-  document = JSON.parse(await Bun.stdin.text());
-} catch (error) {
-  console.error(`Unable to parse Claude plugin list JSON: ${error instanceof Error ? error.message : String(error)}`);
-  process.exit(1);
-}
-
-function collectEntries(value) {
-  if (Array.isArray(value)) return value;
-  if (!value || typeof value !== "object") return [];
-
-  const entries = [];
-  for (const key of ["plugins", "installedPlugins", "installed", "items", "data"]) {
-    if (key in value) entries.push(...collectEntries(value[key]));
-  }
-
-  if (typeof value.id === "string" || typeof value.pluginId === "string") {
-    entries.push(value);
-  }
-
-  if (entries.length === 0) {
-    for (const [key, child] of Object.entries(value)) {
-      if (key === expectedId) {
-        entries.push(
-          child && typeof child === "object" && !Array.isArray(child)
-            ? { ...child, id: expectedId }
-            : { id: expectedId, installed: child },
-        );
-      }
-    }
-  }
-
-  return entries;
-}
-
-function identifiers(entry) {
-  if (typeof entry === "string") return [entry];
-  if (!entry || typeof entry !== "object") return [];
-  return [entry.id, entry.pluginId, entry.plugin?.id]
-    .filter((value) => typeof value === "string");
-}
-
-const plugin = collectEntries(document).find((entry) =>
-  identifiers(entry).some((identifier) => identifier === expectedId),
-);
-
-if (field === "state") {
-  if (!plugin) {
-    process.stdout.write("missing\n");
-    process.exit(0);
-  }
-
-  const status = String(plugin.status ?? plugin.state ?? "").toLowerCase();
-  const disabled = plugin.enabled === false ||
-    plugin.enabled === "false" ||
-    plugin.isEnabled === false ||
-    plugin.disabled === true ||
-    ["disabled", "off", "inactive"].includes(status);
-  process.stdout.write(`${disabled ? "disabled" : "enabled"}\n`);
-  process.exit(0);
-}
-
-if (field === "installPath") {
-  if (!plugin) {
-    console.error(`Claude plugin ${expectedId} is missing from plugin metadata`);
-    process.exit(1);
-  }
-
-  const installPath = plugin.installPath;
-  if (typeof installPath !== "string" || installPath.length === 0) {
-    console.error(`Claude plugin ${expectedId} has no installPath in plugin metadata`);
-    process.exit(1);
-  }
-
-  process.stdout.write(`${installPath}\n`);
-  process.exit(0);
-}
-
-console.error(`Unsupported Claude plugin metadata field: ${field}`);
-process.exit(1);
-'
+  printf '%s' "$plugin_json" | bun "$LIB_DIR/claude-plugins.ts" "$field"
 }
 
 parse_claude_marketplace_state() {
   local marketplace_json="$1"
 
-  # shellcheck disable=SC2016
-  printf '%s' "$marketplace_json" | bun -e '
-const expectedName = "claude-plugins-official";
-let document;
-
-try {
-  document = JSON.parse(await Bun.stdin.text());
-} catch (error) {
-  console.error(`Unable to parse Claude marketplace list JSON: ${error instanceof Error ? error.message : String(error)}`);
-  process.exit(1);
-}
-
-function collectEntries(value) {
-  if (Array.isArray(value)) return value;
-  if (!value || typeof value !== "object") return [];
-
-  const entries = [];
-  for (const key of ["marketplaces", "items", "data"]) {
-    if (key in value) entries.push(...collectEntries(value[key]));
-  }
-
-  if (
-    typeof value.name === "string" ||
-    typeof value.id === "string" ||
-    typeof value.marketplace === "string"
-  ) {
-    entries.push(value);
-  }
-
-  if (entries.length === 0) {
-    for (const [key, child] of Object.entries(value)) {
-      if (key === expectedName) {
-        entries.push(
-          child && typeof child === "object" && !Array.isArray(child)
-            ? { ...child, name: expectedName }
-            : { name: expectedName, installed: child },
-        );
-      }
-    }
-  }
-
-  return entries;
-}
-
-const present = collectEntries(document).some((entry) => {
-  if (typeof entry === "string") return entry === expectedName;
-  if (!entry || typeof entry !== "object") return false;
-  return [entry.name, entry.id, entry.marketplace]
-    .some((value) => value === expectedName);
-});
-
-process.stdout.write(`${present ? "present" : "missing"}\n`);
-'
+  printf '%s' "$marketplace_json" | bun "$LIB_DIR/claude-marketplaces.ts" state
 }
 
 parse_codex_plugin_state() {
   local plugin_json="$1"
 
-  # shellcheck disable=SC2016
-  printf '%s' "$plugin_json" | bun -e '
-const expectedIds = new Set([
-  "superpowers",
-  "superpowers@openai-curated",
-  "superpowers@openai-api-curated",
-]);
-let document;
-
-try {
-  document = JSON.parse(await Bun.stdin.text());
-} catch (error) {
-  console.error(`Unable to parse Codex plugin list JSON: ${error instanceof Error ? error.message : String(error)}`);
-  process.exit(1);
-}
-
-function collectEntries(value) {
-  if (Array.isArray(value)) return value;
-  if (!value || typeof value !== "object") return [];
-
-  const entries = [];
-  for (const key of ["plugins", "installedPlugins", "installed", "items", "data"]) {
-    if (key in value) entries.push(...collectEntries(value[key]));
-  }
-
-  if (typeof value.id === "string" || typeof value.pluginId === "string" || typeof value.name === "string") {
-    entries.push(value);
-  }
-
-  if (entries.length === 0) {
-    for (const [key, child] of Object.entries(value)) {
-      if (
-        key === "superpowers" ||
-        key === "superpowers@openai-curated" ||
-        key === "superpowers@openai-api-curated"
-      ) {
-        entries.push(
-          child && typeof child === "object" && !Array.isArray(child)
-            ? { ...child, id: key }
-            : { id: key, installed: child },
-        );
-      }
-    }
-  }
-
-  return entries;
-}
-
-function identifiers(entry) {
-  if (typeof entry === "string") return [entry];
-  if (!entry || typeof entry !== "object") return [];
-  return [entry.id, entry.pluginId, entry.name, entry.slug, entry.package]
-    .filter((value) => typeof value === "string");
-}
-
-function isInstalled(entry) {
-  if (!entry || typeof entry !== "object") return true;
-  const status = String(entry.status ?? entry.state ?? "")
-    .toLowerCase()
-    .replaceAll("_", "-")
-    .replaceAll(" ", "-");
-  return entry.installed !== false &&
-    entry.installed !== "false" &&
-    !["not-installed", "uninstalled", "available"].includes(status);
-}
-
-const installed = collectEntries(document).some((entry) =>
-  identifiers(entry).some((identifier) => expectedIds.has(identifier)) && isInstalled(entry),
-);
-process.stdout.write(`${installed ? "installed" : "missing"}\n`);
-'
+  printf '%s' "$plugin_json" | bun "$LIB_DIR/codex-plugins.ts" state
 }
 
 parse_codex_marketplace_name() {
   local marketplace_json="$1"
 
-  # shellcheck disable=SC2016
-  printf '%s' "$marketplace_json" | bun -e '
-const supportedNames = new Set(["openai-curated", "openai-api-curated"]);
-let document;
-
-try {
-  document = JSON.parse(await Bun.stdin.text());
-} catch (error) {
-  console.error(`Unable to parse Codex marketplace list JSON: ${error instanceof Error ? error.message : String(error)}`);
-  process.exit(1);
-}
-
-function collectEntries(value) {
-  if (Array.isArray(value)) return value.flatMap(collectEntries);
-  if (!value || typeof value !== "object") return [];
-
-  const entries = [];
-  for (const key of ["marketplaces", "items", "data"]) {
-    if (key in value) entries.push(...collectEntries(value[key]));
-  }
-
-  if (
-    typeof value.name === "string" ||
-    typeof value.id === "string" ||
-    typeof value.marketplace === "string" ||
-    typeof value.slug === "string"
-  ) {
-    entries.push(value);
-  }
-
-  if (entries.length === 0) {
-    for (const [key, child] of Object.entries(value)) {
-      if (supportedNames.has(key)) {
-        entries.push(
-          child && typeof child === "object" && !Array.isArray(child)
-            ? { ...child, name: key }
-            : { name: key },
-        );
-      }
-    }
-  }
-
-  return entries;
-}
-
-function identifiers(entry) {
-  if (typeof entry === "string") return [entry];
-  if (!entry || typeof entry !== "object") return [];
-  return [entry.name, entry.id, entry.marketplace, entry.slug]
-    .filter((value) => typeof value === "string");
-}
-
-function isPreferred(entry) {
-  if (!entry || typeof entry !== "object") return false;
-  return ["active", "default", "isActive", "isDefault", "current", "selected"]
-    .some((key) => entry[key] === true || entry[key] === "true" || entry[key] === 1);
-}
-
-let selected;
-let selectedScore = -1;
-for (const entry of collectEntries(document)) {
-  const name = identifiers(entry).find((identifier) => supportedNames.has(identifier));
-  if (!name) continue;
-
-  const score = (isPreferred(entry) ? 2 : 0) + (name === "openai-curated" ? 1 : 0);
-  if (score > selectedScore) {
-    selected = name;
-    selectedScore = score;
-  }
-}
-
-if (!selected) {
-  console.error("No supported official Codex marketplace is exposed");
-  process.exit(1);
-}
-process.stdout.write(`${selected}\n`);
-'
+  printf '%s' "$marketplace_json" | bun "$LIB_DIR/codex-marketplaces.ts" name
 }
 
 defer_superpowers_setup() {
