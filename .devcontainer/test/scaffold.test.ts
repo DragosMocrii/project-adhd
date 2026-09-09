@@ -342,7 +342,7 @@ test("installs Gemini CLI globally when the command is missing", async () => {
       home,
       {
         HOME: home,
-        PATH: `${stubBin}:/usr/bin:/bin`,
+        PATH: stubBin,
         GEMINI_INSTALL_MARKER: marker,
         OMP_TRUST_MARKER: trustMarker,
         OMP_TRUST_STAGE: trustStage,
@@ -375,7 +375,7 @@ test("reports Bun trust query failures", async () => {
     const result = await run(
       ["/bin/bash", "-c", 'source "$1"; trust_omp_dependencies', "scaffold-installer", postCreatePath],
       home,
-      { HOME: home, PATH: `${stubBin}:${process.env.PATH ?? ""}` },
+      { HOME: home, PATH: stubBin },
     );
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toContain("unable to query untrusted Bun dependencies");
