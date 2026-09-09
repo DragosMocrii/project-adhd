@@ -7,5 +7,5 @@
     "target": "ES2024",
     "types": ["bun"]
   },
-  "include": ["test/**/*.ts"]
+  "include": ["lib/**/*.ts", "test/**/*.ts"]
 }
