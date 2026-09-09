@@ -241,8 +241,12 @@ main() {
     record_skip 'OMP checks (omp not selected)'
   fi
 
-  check_archify
-  record_pass
+  if agent_tool_selected claude || agent_tool_selected codex || agent_tool_selected omp; then
+    check_archify
+    record_pass
+  else
+    record_skip 'Archify skill check (no selected tool has an archify destination)'
+  fi
   check_rtk
   record_pass
 

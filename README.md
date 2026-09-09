@@ -19,6 +19,15 @@ your project's own `package.json`, `src/`, and tests stay entirely yours.
 
 ## Create a project
 
+Your host machine needs:
+
+- Docker
+- VS Code with the Dev Containers extension
+- an authenticated GitHub CLI (`gh auth login`)
+- `bash` and `git`
+
+These run on the host itself, not inside the container — the Dev Containers extension's `initializeCommand` invokes `bash .devcontainer/initialize.sh` on the host before the container is built.
+
 ```bash
 gh repo create my-project --private --template DragosMocrii/project-adhd --clone
 cd my-project
