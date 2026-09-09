@@ -6,9 +6,13 @@ export CLAUDE_CONFIG_DIR
 export NPM_CONFIG_PREFIX="$HOME/.local"
 export PATH="$HOME/.bun/bin:$HOME/.local/bin:${PATH:-}"
 
-LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/lib" && pwd)"
+POST_CREATE_DIR="${BASH_SOURCE[0]%/*}"
+if [[ "$POST_CREATE_DIR" == "${BASH_SOURCE[0]}" ]]; then
+  POST_CREATE_DIR=.
+fi
+LIB_DIR="$(cd "$POST_CREATE_DIR/lib" && pwd)"
 
-# shellcheck source=/workspace/.devcontainer/lib/agent-tools.sh
+# shellcheck disable=SC1091
 source "$LIB_DIR/agent-tools.sh"
 
 readonly -a STATE_ROOTS=(
