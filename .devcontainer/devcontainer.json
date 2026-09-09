@@ -26,7 +26,7 @@
     }
   },
   "initializeCommand": "bash \"${localWorkspaceFolder}/.devcontainer/initialize.sh\" \"${localWorkspaceFolder}\"",
-  "updateContentCommand": "bun install --frozen-lockfile",
+  "updateContentCommand": "cd .devcontainer && bun install --frozen-lockfile",
   "postCreateCommand": "bash .devcontainer/post-create.sh",
   "remoteUser": "vscode",
   "containerEnv": {
