@@ -5,7 +5,26 @@ CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 export CLAUDE_CONFIG_DIR
 export PATH="$HOME/.bun/bin:$HOME/.local/bin:${PATH:-}"
 
-LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/lib" && pwd)"
+VERIFY_DIR="${BASH_SOURCE[0]%/*}"
+if [[ "$VERIFY_DIR" == "${BASH_SOURCE[0]}" ]]; then
+  VERIFY_DIR=.
+fi
+LIB_DIR="$(cd "$VERIFY_DIR/lib" && pwd)"
+
+# shellcheck disable=SC1091
+source "$LIB_DIR/agent-tools.sh"
+
+VERIFY_PASSED=0
+VERIFY_SKIPPED=0
+
+record_pass() {
+  VERIFY_PASSED=$((VERIFY_PASSED + 1))
+}
+
+record_skip() {
+  VERIFY_SKIPPED=$((VERIFY_SKIPPED + 1))
+  printf 'verify: SKIP %s\n' "$1"
+}
 
 fail() {
   printf 'verify: %s\n' "$*" >&2
@@ -125,7 +144,7 @@ check_codex_plugin() {
 }
 
 check_omp_plugin() {
-  local plugin_json install_path extension
+  local plugin_json install_path
 
   if ! plugin_json="$(omp plugin list --json)"; then
     fail 'omp plugin list --json failed'
@@ -137,8 +156,11 @@ check_omp_plugin() {
     ! -r "$install_path/skills/using-superpowers/SKILL.md" ]]; then
     fail "OMP superpowers package is missing skills/using-superpowers/SKILL.md: $install_path"
   fi
+}
 
-  extension="$HOME/.omp/agent/extensions/rtk.ts"
+check_omp_rtk_extension() {
+  local extension="$HOME/.omp/agent/extensions/rtk.ts"
+
   if [[ ! -f "$extension" || ! -r "$extension" ]]; then
     fail "OMP RTK extension is missing or unreadable: $extension"
   fi
@@ -146,10 +168,17 @@ check_omp_plugin() {
 
 check_archify() {
   local skill_root
-  for skill_root in \
-    "$CLAUDE_CONFIG_DIR/skills/archify" \
-    "$HOME/.codex/skills/archify" \
-    "$HOME/.omp/agent/skills/archify"; do
+  local -a roots=()
+
+  if agent_tool_selected claude; then roots+=("$CLAUDE_CONFIG_DIR/skills/archify"); fi
+  if agent_tool_selected codex; then roots+=("$HOME/.codex/skills/archify"); fi
+  if agent_tool_selected omp; then roots+=("$HOME/.omp/agent/skills/archify"); fi
+
+  if (( ${#roots[@]} == 0 )); then
+    return 0
+  fi
+
+  for skill_root in "${roots[@]}"; do
     if [[ ! -f "$skill_root/SKILL.md" || ! -r "$skill_root/SKILL.md" ]]; then
       fail "Archify SKILL.md is missing or unreadable: $skill_root/SKILL.md"
     fi
@@ -163,18 +192,66 @@ check_rtk() {
 }
 
 main() {
-  local command_name
-  for command_name in bun node python3 gh claude codex gemini omp rtk; do
+  local command_name tool
+  local -a unselected=()
+
+  agent_tools_init
+  printf 'verify: selected agent tools: %s\n' "$(agent_tools_summary)"
+
+  for command_name in bun node python3 gh rtk; do
     require_command "$command_name"
+    record_pass
   done
 
-  check_claude_plugin
-  check_claude_settings
-  check_codex_plugin
-  check_omp_plugin
+  for tool in "${AGENT_TOOLS_KNOWN[@]}"; do
+    if agent_tool_selected "$tool"; then
+      require_command "$tool"
+      record_pass
+    else
+      unselected+=("$tool")
+    fi
+  done
+
+  if agent_tool_selected claude; then
+    check_claude_plugin
+    record_pass
+    check_claude_settings
+    record_pass
+  else
+    record_skip 'Claude plugin and settings checks (claude not selected)'
+  fi
+
+  if agent_tool_selected codex; then
+    check_codex_plugin
+    record_pass
+  else
+    record_skip 'Codex plugin check (codex not selected)'
+  fi
+
+  if agent_tool_selected omp; then
+    check_omp_rtk_extension
+    record_pass
+    if agent_tool_selected claude; then
+      check_omp_plugin
+      record_pass
+    else
+      record_skip 'OMP Superpowers check (requires claude in AGENT_TOOLS)'
+    fi
+  else
+    record_skip 'OMP checks (omp not selected)'
+  fi
+
   check_archify
+  record_pass
   check_rtk
-  printf 'verify: all tool, plugin, hook, skill, and RTK checks passed\n'
+  record_pass
+
+  if (( ${#unselected[@]} > 0 )); then
+    printf 'verify: %d passed, %d skipped (%s not selected)\n' \
+      "$VERIFY_PASSED" "$VERIFY_SKIPPED" "$(agent_tools_join "${unselected[@]}")"
+  else
+    printf 'verify: %d passed, %d skipped\n' "$VERIFY_PASSED" "$VERIFY_SKIPPED"
+  fi
 }
 
 main "$@"
