@@ -100,4 +100,5 @@ test("characterizes Codex marketplace preference and absence", async () => {
 
   const none = await callShellParser("parse_codex_marketplace_name", CODEX_MARKETPLACES_NONE);
   expect(none.exitCode).toBe(1);
+  expect(none.stdout.trim()).toBe("");
 });
