@@ -1,36 +1,111 @@
-# Agentic Bun and TypeScript
+# project-adhd
 
-This repository is a GitHub template for a generic Bun and TypeScript project. The Dev Container provides the pinned runtime, includes `python3` for agent scripts and convenience utilities, and installs the agent CLIs during first container creation.
+A GitHub template for an agentic development environment: a pinned Dev
+Container that installs your choice of agent CLIs, wires them to the RTK
+token-optimizing proxy and the Superpowers plugin, and keeps every credential
+and plugin in per-project Docker volumes that survive rebuilds.
+
+**What you get**
+
+- A digest-pinned Dev Container with Bun, Node, `python3`, and the GitHub CLI.
+- Your choice of Claude Code, Codex, Gemini CLI, and OMP — see `AGENT_TOOLS`.
+- RTK configured as a hook for each selected agent, cutting bash output tokens.
+- The Superpowers plugin and the Archify skill installed per agent.
+- Seven named state volumes, scoped per project and shared across worktrees.
+- A contract test suite and `verify.sh` that prove the environment is correct.
+
+This template provisions an *environment*. It ships no application scaffold —
+your project's own `package.json`, `src/`, and tests stay entirely yours.
 
 ## Create a project
 
-Resolve the authenticated GitHub owner and create a private generated repository from the template:
-
 ```bash
-OWNER="$(gh api user --jq .login)"
-gh repo create my-project --private --template "$OWNER/project-adhd" --clone
+gh repo create my-project --private --template DragosMocrii/project-adhd --clone
 cd my-project
 ```
 
-Open the clone in VS Code (`code .`) and run **Dev Containers: Reopen in Container**. The first creation installs Bun tooling, Claude Code, Codex, Gemini CLI, OMP, RTK, and Archify. On a fresh clone, Claude and Codex have no login yet, so post-create deliberately skips auth-dependent Superpowers plugin setup and exits successfully after printing the deferred setup instructions. Archify is still installed during this first run.
+Open the clone in VS Code (`code .`) and run **Dev Containers: Reopen in
+Container**.
 
-After the first run, authenticate each project and rerun the post-create bootstrap before verification. Start `gemini` once and complete its sign-in flow, then:
+## First-run setup
+
+1. **Choose your tools.** Copy `.devcontainer/devcontainer.env.example` to
+   `.devcontainer/devcontainer.env` and set `AGENT_TOOLS` (see below). Skip
+   this to get all four.
+2. **Let the container build.** The first creation installs Bun tooling, the
+   selected agent CLIs, RTK, and Archify. No agent is authenticated yet, so
+   post-create deliberately defers Superpowers setup, prints what to run, and
+   exits successfully.
+3. **Authenticate.** Start `gemini` once and complete its sign-in flow if you
+   selected it, then run the logins for the tools you selected:
+
+   ```bash
+   gh auth login
+   claude auth login
+   codex login
+   ```
+
+4. **Rerun post-create.** This installs or enables Superpowers through each
+   CLI's native mechanism, selecting the exposed reserved Codex catalog:
+   `openai-curated` for ChatGPT authentication or `openai-api-curated` for
+   API-key authentication.
+
+   ```bash
+   bash .devcontainer/post-create.sh
+   ```
+
+5. **Verify.**
+
+   ```bash
+   .devcontainer/verify.sh
+   ```
+
+   Checks for unselected tools report `SKIP`; a selected tool that is not yet
+   configured reports a failure, which is the expected result before step 3.
+
+Complete the OMP provider setup if OMP asks for it after authentication.
+Credentials and configuration stay in this project's state volumes; they are
+not shared with another generated project.
+
+## Choosing your agent tools
+
+`AGENT_TOOLS` in `.devcontainer/devcontainer.env` controls which agent CLIs
+are installed and verified. It is a comma-separated list drawn from `claude`,
+`codex`, `gemini`, and `omp`:
 
 ```bash
-gh auth login
-claude auth login
-codex login
-bash .devcontainer/post-create.sh
-.devcontainer/verify.sh
+AGENT_TOOLS=claude          # Claude Code only
+AGENT_TOOLS=claude,codex    # Claude Code and Codex
 ```
 
-The rerun installs or enables Superpowers through each CLI's native mechanism, selecting the exposed reserved Codex catalog: `openai-curated` for ChatGPT authentication or `openai-api-curated` for API-key authentication. Complete the OMP provider setup if OMP asks for it after authentication. Credentials and configuration stay in this project's state volumes; they are not shared with another generated project.
+Leave it unset or empty to select all four. An unrecognized value fails the
+run rather than being silently ignored.
+
+`rtk` and the GitHub CLI are always installed — RTK is a proxy consumed by the
+agents rather than an agent itself.
+
+Two constraints are worth knowing before you choose:
+
+- **OMP Superpowers requires Claude.** OMP sources the Superpowers package
+  from Claude's installed plugin, so `omp` needs `claude` selected *and*
+  authenticated. Otherwise OMP is installed and configured, and its
+  Superpowers step is skipped with a message.
+- **Gemini CLI has no RTK integration** and no Archify destination today.
+
+## Security
+
+`post-create.sh` fetches and executes vendor installers, and the container has
+access to the host Docker daemon. See [SECURITY.md](SECURITY.md) for exactly
+what runs, from where, and where credentials live.
 
 ## Adapting an existing project
 
 If the generated repository will be used with a project that already has its own source and test files, keep those root application files and remove or replace only template-owned content:
 
 - `.devcontainer/test/scaffold.test.ts` — template contract suite; remove it if the existing project has its own tests and the template contract is no longer needed.
+- `.omp/lsp.json` — template-owned OMP language-server configuration pointing
+  at the TypeScript under `.devcontainer/`. Remove it if the adopted project
+  does not use OMP, or repoint it at the project's own TypeScript install.
 - `src/` and `test/` — the root directories belong to the adopted project. Remove either only when it contains no existing project files.
 - `README.md` — replaceable project documentation; preserve the relevant Dev Container, authentication, and state-volume instructions if the setup remains in use.
 
