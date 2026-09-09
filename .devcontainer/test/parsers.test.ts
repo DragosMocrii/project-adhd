@@ -1,5 +1,10 @@
 import { expect, test } from "bun:test";
 import { join, resolve } from "node:path";
+import { marketplaceState as claudeMarketplaceState } from "../lib/claude-marketplaces";
+import { pluginInstallPath as claudeInstallPath, pluginState as claudePluginState } from "../lib/claude-plugins";
+import { marketplaceName as codexMarketplaceName } from "../lib/codex-marketplaces";
+import { pluginState as codexPluginState } from "../lib/codex-plugins";
+import { pluginInstallPath as ompInstallPath } from "../lib/omp-plugins";
 import {
   CLAUDE_MARKETPLACES_EMPTY,
   CLAUDE_MARKETPLACES_PRESENT,
@@ -13,6 +18,9 @@ import {
   CODEX_PLUGINS_AVAILABLE_ONLY,
   CODEX_PLUGINS_EMPTY,
   CODEX_PLUGINS_INSTALLED,
+  OMP_PLUGINS_DISABLED,
+  OMP_PLUGINS_INSTALLED,
+  OMP_PLUGINS_PATHLESS,
 } from "./fixtures/plugin-json";
 
 const scaffoldRoot = resolve(import.meta.dir, "..");
@@ -101,4 +109,72 @@ test("characterizes Codex marketplace preference and absence", async () => {
   const none = await callShellParser("parse_codex_marketplace_name", CODEX_MARKETPLACES_NONE);
   expect(none.exitCode).toBe(1);
   expect(none.stdout.trim()).toBe("");
+});
+
+test("claude-plugins module matches the characterized state behavior", () => {
+  expect(claudePluginState(CLAUDE_PLUGINS_ARRAY)).toBe("enabled");
+  expect(claudePluginState(CLAUDE_PLUGINS_BARE_MAP)).toBe("enabled");
+  expect(claudePluginState(CLAUDE_PLUGINS_DISABLED)).toBe("disabled");
+  expect(claudePluginState(CLAUDE_PLUGINS_EMPTY)).toBe("missing");
+});
+
+test("claude-plugins module resolves installPath and throws when absent", () => {
+  expect(claudeInstallPath(CLAUDE_PLUGINS_ARRAY)).toBe(
+    "/home/vscode/.claude/plugins/cache/claude-plugins-official/superpowers/6.3.0",
+  );
+  expect(() => claudeInstallPath(CLAUDE_PLUGINS_EMPTY)).toThrow();
+});
+
+test("claude-marketplaces module reports presence", () => {
+  expect(claudeMarketplaceState(CLAUDE_MARKETPLACES_PRESENT)).toBe("present");
+  expect(claudeMarketplaceState(CLAUDE_MARKETPLACES_EMPTY)).toBe("missing");
+});
+
+test("codex-plugins module ignores available-but-not-installed entries", () => {
+  expect(codexPluginState(CODEX_PLUGINS_INSTALLED)).toBe("installed");
+  expect(codexPluginState(CODEX_PLUGINS_EMPTY)).toBe("missing");
+  expect(codexPluginState(CODEX_PLUGINS_AVAILABLE_ONLY)).toBe("missing");
+});
+
+test("codex-marketplaces module prefers openai-curated and throws when neither is exposed", () => {
+  expect(codexMarketplaceName(CODEX_MARKETPLACES_BOTH)).toBe("openai-curated");
+  expect(codexMarketplaceName(CODEX_MARKETPLACES_API_ONLY)).toBe("openai-api-curated");
+  expect(() => codexMarketplaceName(CODEX_MARKETPLACES_NONE)).toThrow();
+});
+
+test("omp-plugins module requires an enabled plugin with a path", () => {
+  expect(ompInstallPath(OMP_PLUGINS_INSTALLED)).toBe("/home/vscode/.omp/agent/plugins/superpowers");
+  expect(() => ompInstallPath(OMP_PLUGINS_DISABLED)).toThrow();
+  expect(() => ompInstallPath(OMP_PLUGINS_PATHLESS)).toThrow();
+});
+
+test("parser modules honor the stdin/argv CLI contract", async () => {
+  const libDir = join(scaffoldRoot, "lib");
+
+  const ok = Bun.spawn(["bun", join(libDir, "claude-plugins.ts"), "state"], {
+    stdin: new TextEncoder().encode(JSON.stringify(CLAUDE_PLUGINS_ARRAY)),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  expect(await new Response(ok.stdout).text()).toBe("enabled\n");
+  expect(await ok.exited).toBe(0);
+
+  const malformed = Bun.spawn(["bun", join(libDir, "claude-plugins.ts"), "state"], {
+    stdin: new TextEncoder().encode("{ not json"),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const malformedStdout = await new Response(malformed.stdout).text();
+  const malformedStderr = await new Response(malformed.stderr).text();
+  expect(await malformed.exited).toBe(1);
+  expect(malformedStdout).toBe("");
+  expect(malformedStderr).toContain("unable to parse JSON");
+
+  const badField = Bun.spawn(["bun", join(libDir, "claude-plugins.ts"), "nonsense"], {
+    stdin: new TextEncoder().encode(JSON.stringify(CLAUDE_PLUGINS_ARRAY)),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  expect(await badField.exited).toBe(1);
+  expect(await new Response(badField.stderr).text()).toContain("unsupported field");
 });
