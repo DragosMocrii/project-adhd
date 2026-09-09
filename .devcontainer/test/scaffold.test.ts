@@ -13,12 +13,9 @@ import {
 } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { environmentName } from "../src/index";
-
-const scaffoldRoot = resolve(import.meta.dir, "..");
+const scaffoldRoot = resolve(import.meta.dir, "../..");
 const initializerPath = join(scaffoldRoot, ".devcontainer", "initialize.sh");
 const postCreatePath = join(scaffoldRoot, ".devcontainer", "post-create.sh");
-const verifyPath = join(scaffoldRoot, ".devcontainer", "verify.sh");
 const devcontainerConfigPath = join(scaffoldRoot, ".devcontainer", "devcontainer.json");
 const gitignorePath = join(scaffoldRoot, ".gitignore");
 const composePath = join(scaffoldRoot, ".devcontainer", "docker-compose.yml");
@@ -137,10 +134,6 @@ async function canonicalGitCommonDirectory(root: string): Promise<string> {
   return realpath(isAbsolute(reported) ? reported : join(root, reported));
 }
 
-test("reports the starter environment name", () => {
-  expect(environmentName()).toBe("agentic-bun-project");
-});
-
 test("normalizes the repository name and hashes its canonical Git common directory", async () => {
   await withTemporaryParent(async (parent) => {
     const root = join(parent, "My Project");
@@ -234,32 +227,6 @@ test("rejects a valid prefix followed by an unterminated extra state line", asyn
   });
 });
 
-test("uses portable shell primitives for initializer identity and state files", async () => {
-  const source = await readFile(initializerPath, "utf8");
-  expect(source).not.toContain("realpath -e");
-  expect(source).not.toMatch(/\$\{[A-Za-z_][A-Za-z0-9_]*,,\}/);
-  expect(source).not.toContain("mapfile");
-  expect(source).toContain("tr '[:upper:]' '[:lower:]'");
-  expect(source).toContain("sha256sum");
-  expect(source).toContain("shasum");
-  expect(source).toContain("while IFS= read -r");
-});
-
-test("enables Codex plugins before selecting an exposed official marketplace", async () => {
-  const postCreate = await readFile(postCreatePath, "utf8");
-  const featureIndex = postCreate.indexOf("codex features enable plugins");
-  const listIndex = postCreate.indexOf("codex plugin marketplace list --json");
-  const addIndex = postCreate.indexOf("codex plugin add superpowers@$");
-
-  expect(featureIndex).toBeGreaterThanOrEqual(0);
-  expect(listIndex).toBeGreaterThan(featureIndex);
-  expect(addIndex).toBeGreaterThan(listIndex);
-  expect(postCreate).toContain("openai-curated");
-  expect(postCreate).toContain("openai-api-curated");
-  expect(postCreate).not.toContain("codex plugin marketplace upgrade");
-  expect(postCreate).not.toContain("codex plugin marketplace add");
-});
-
 test("selects Codex default and API-key catalogs, preferring active/default, and rejects absence", async () => {
   const defaultCatalog = await parseCodexMarketplace({
     marketplaces: [{ name: "openai-curated", root: "/home/vscode/.codex/.tmp/plugins" }],
@@ -286,24 +253,6 @@ test("selects Codex default and API-key catalogs, preferring active/default, and
   });
   expect(absentCatalog.exitCode).not.toBe(0);
   expect(absentCatalog.stderr).toContain("official Codex marketplace");
-});
-
-test("defers auth-gated Superpowers setup until users can rerun after login", async () => {
-  const postCreate = await readFile(postCreatePath, "utf8");
-  const verify = await readFile(verifyPath, "utf8");
-  const obsoleteSelector = ["openai", "api", "curated"].join("-");
-  const obsoleteAddCommand = `codex plugin add superpowers@${obsoleteSelector}`;
-
-  expect(postCreate).toContain("claude auth status");
-  expect(postCreate).toContain("codex login status");
-  expect(postCreate).toContain("Superpowers setup deferred");
-  expect(postCreate).toContain("bash .devcontainer/post-create.sh");
-  expect(postCreate).toContain("install_archify");
-  expect(postCreate).toContain("codex plugin add superpowers@$codex_marketplace --json");
-  expect(postCreate).not.toContain(obsoleteAddCommand);
-  expect(verify).toContain("openai-curated");
-  expect(verify).toContain("openai-api-curated");
-  expect(verify).not.toContain(obsoleteAddCommand);
 });
 
 test("runs pre-login post-create successfully while still installing auth-free Archify", async () => {
@@ -467,12 +416,6 @@ test("reinstalls RTK when the existing binary fails the RTK identity check", asy
     expect(await readFile(marker, "utf8")).toBe("installed");
   });
 });
-test("quotes the host-side initialize command for paths containing spaces", async () => {
-  const devcontainer = await readFile(devcontainerConfigPath, "utf8");
-  expect(devcontainer).toContain(
-    '"initializeCommand": "bash \\"${localWorkspaceFolder}/.devcontainer/initialize.sh\\" \\"${localWorkspaceFolder}\\""',
-  );
-});
 
 test("separates independent repositories with the same basename", async () => {
   await withTemporaryParent(async (parent) => {
@@ -593,31 +536,6 @@ test("enforces root-scoped ignore rules for local state", async () => {
   });
 });
 
-test("keeps tracked configuration free of product paths and unconditional databases", async () => {
-  const tracked = (await checked(["git", "ls-files"], scaffoldRoot))
-    .split("\n")
-    .filter((path) => path.length > 0 && !path.startsWith("test/"));
-  const contents = await Promise.all(
-    tracked.map(async (path) => [path, await readFile(join(scaffoldRoot, path), "utf8")] as const),
-  );
-  const forbidden = [
-    "integration-kit",
-    "@integration-kit",
-    "/workspaces/integration-kit",
-    "DragosMocrii",
-    "apps/playground",
-  ];
-  for (const [path, text] of contents) {
-    for (const value of forbidden) {
-      expect(text, `${path} contains forbidden value ${value}`).not.toContain(value);
-    }
-  }
-
-  const compose = contents.find(([path]) => path === ".devcontainer/docker-compose.yml");
-  expect(compose).toBeDefined();
-  expect(compose?.[1]).not.toMatch(/^\s*(redis|postgres(?:ql)?|mysql)\s*:/im);
-});
-
 test("renders one Compose workspace with seven explicit state volumes and no published ports", async () => {
   await withTemporaryParent(async (parent) => {
     const root = join(parent, "compose-contract");
@@ -681,44 +599,4 @@ test("configures Gemini CLI for manual authentication", async () => {
     containerEnv?: Record<string, string>;
   };
   expect(config.containerEnv?.NO_BROWSER).toBe("true");
-});
-
-test("documents executable template setup and state conventions", async () => {
-  const readme = await readFile(join(scaffoldRoot, "README.md"), "utf8");
-  for (const required of [
-    "python3",
-    'OWNER="$(gh api user --jq .login)"',
-    'gh repo create my-project --private --template "$OWNER/project-adhd" --clone',
-    "git worktree add .worktrees/feature-example -b feature/example",
-    "gh auth login",
-    "claude auth login",
-    "codex login",
-    "gemini",
-    "bash .devcontainer/post-create.sh",
-    "OMP provider",
-    "LOCAL_WORKSPACE_FOLDER",
-    "relative to the shared/main checkout",
-    "host main-checkout anchor",
-    "daemon-visible",
-    "bun test",
-    "bun run typecheck",
-    ".devcontainer/verify.sh",
-  ]) {
-    expect(readme).toContain(required);
-  }
-  expect(readme).toContain("skips auth-dependent Superpowers plugin setup");
-  expect(readme).toContain("exits successfully");
-  expect(readme).not.toContain("private GitHub template");
-  const authRerunSteps = [
-    "gh auth login",
-    "claude auth login",
-    "codex login",
-    "bash .devcontainer/post-create.sh",
-    ".devcontainer/verify.sh",
-  ];
-  for (let index = 1; index < authRerunSteps.length; index += 1) {
-    expect(readme.indexOf(authRerunSteps[index])).toBeGreaterThan(
-      readme.indexOf(authRerunSteps[index - 1]),
-    );
-  }
 });

@@ -26,6 +26,19 @@ bash .devcontainer/post-create.sh
 
 The rerun installs or enables Superpowers through each CLI's native mechanism, selecting the exposed reserved Codex catalog: `openai-curated` for ChatGPT authentication or `openai-api-curated` for API-key authentication. Complete the OMP provider setup if OMP asks for it after authentication. Credentials and configuration stay in this project's state volumes; they are not shared with another generated project.
 
+## Adapting an existing project
+
+If the generated repository will be used with a project that already has its own source and test files, keep those root application files and remove or replace only template-owned content:
+
+- `.devcontainer/test/scaffold.test.ts` — template contract suite; remove it if the existing project has its own tests and the template contract is no longer needed.
+- `src/` and `test/` — the root directories belong to the adopted project. Remove either only when it contains no existing project files.
+- `README.md` — replaceable project documentation; preserve the relevant Dev Container, authentication, and state-volume instructions if the setup remains in use.
+
+Keep `.devcontainer/` unless the project's development environment is being replaced. In particular, `devcontainer.json`, `docker-compose.yml`, `initialize.sh`, `post-create.sh`, and `verify.sh` provide the container lifecycle and agent-tool setup. The template's `package.json`, `bun.lock`, and `tsconfig.json` live under `.devcontainer/`; the generated project's root package manifest, lockfile, and TypeScript configuration remain independent. Adapt the root project's own scripts and dependencies without merging them into the template contract.
+
+Deleting `.devcontainer/.env` or `.devcontainer/devcontainer.env` does not clear the named Docker volumes. The initializer recreates missing local files, but deleting `devcontainer.env` loses its local secrets; removing persistent agent state requires a separate, deliberate Docker volume cleanup.
+
+
 ## Worktrees and persistent state
 
 Create project-local linked worktrees with:
@@ -60,12 +73,10 @@ The Docker daemon used from inside the Dev Container runs on the host. Any bind 
 
 `LOCAL_WORKSPACE_FOLDER` identifies the host main-checkout anchor passed into the container. For a linked worktree, do not treat it as the current worktree path: derive the current worktree path relative to the shared/main checkout (for example, `.worktrees/feature-example`), then append that offset to the daemon-visible host main-checkout anchor before constructing bind mounts. This keeps Compose paths correct for both the main checkout and linked worktrees.
 
-## Local checks
-
-Run the starter contract, strict TypeScript check, and non-mutating tool smoke check with:
+Run the nested template contract, strict TypeScript check, and non-mutating tool smoke check from the repository root:
 
 ```bash
-bun test
-bun run typecheck
+(cd .devcontainer && bun test)
+(cd .devcontainer && bun run typecheck)
 .devcontainer/verify.sh
 ```
