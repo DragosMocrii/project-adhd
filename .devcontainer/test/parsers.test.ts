@@ -18,6 +18,7 @@ import {
   CODEX_PLUGINS_AVAILABLE_ONLY,
   CODEX_PLUGINS_EMPTY,
   CODEX_PLUGINS_INSTALLED,
+  CODEX_PLUGINS_INSTALLED_STATUS_AVAILABLE,
   OMP_PLUGINS_DISABLED,
   OMP_PLUGINS_INSTALLED,
   OMP_PLUGINS_PATHLESS,
@@ -92,6 +93,7 @@ test("characterizes Codex plugin state, ignoring available-but-not-installed ent
     [CODEX_PLUGINS_INSTALLED, "installed"],
     [CODEX_PLUGINS_EMPTY, "missing"],
     [CODEX_PLUGINS_AVAILABLE_ONLY, "missing"],
+    [CODEX_PLUGINS_INSTALLED_STATUS_AVAILABLE, "missing"],
   ] as const) {
     const result = await callShellParser("parse_codex_plugin_state", document);
     expect(result.exitCode).toBe(0);
@@ -134,6 +136,7 @@ test("codex-plugins module ignores available-but-not-installed entries", () => {
   expect(codexPluginState(CODEX_PLUGINS_INSTALLED)).toBe("installed");
   expect(codexPluginState(CODEX_PLUGINS_EMPTY)).toBe("missing");
   expect(codexPluginState(CODEX_PLUGINS_AVAILABLE_ONLY)).toBe("missing");
+  expect(codexPluginState(CODEX_PLUGINS_INSTALLED_STATUS_AVAILABLE)).toBe("missing");
 });
 
 test("codex-marketplaces module prefers openai-curated and throws when neither is exposed", () => {
