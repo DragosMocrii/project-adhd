@@ -60,7 +60,7 @@ contract suite asserts that. Never commit either one.
 ## Known fragility: plugin detection
 
 `.devcontainer/lib/*.ts` infer plugin and marketplace state from the JSON that
-four CLIs emit. Those output shapes are undocumented and may change without
+three CLIs emit. Those output shapes are undocumented and may change without
 notice. The modules are shape-tolerant and unit-tested, which makes the
 behavior *verifiable* — not guaranteed correct against a future CLI release.
 If `verify.sh` reports a plugin missing that you know is installed, suspect a

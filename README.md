@@ -24,25 +24,24 @@ gh repo create my-project --private --template DragosMocrii/project-adhd --clone
 cd my-project
 ```
 
-Open the clone in VS Code (`code .`) and run **Dev Containers: Reopen in
-Container**.
-
 ## First-run setup
 
-1. **Choose your tools.** Copy `.devcontainer/devcontainer.env.example` to
-   `.devcontainer/devcontainer.env` and set `AGENT_TOOLS` (see below). Skip
-   this to get all four.
-2. **Let the container build.** The first creation installs Bun tooling, the
-   selected agent CLIs, RTK, and Archify. No agent is authenticated yet, so
-   post-create deliberately defers Superpowers setup, prints what to run, and
-   exits successfully.
+1. **Choose your tools, before the first build.** Copy
+   `.devcontainer/devcontainer.env.example` to `.devcontainer/devcontainer.env`
+   and set `AGENT_TOOLS` (see below). Leaving it unset selects all four —
+   do this now if you only have credentials for some of the agents.
+2. **Open the clone in VS Code (`code .`) and run
+   Dev Containers: Reopen in Container.** The first creation installs Bun
+   tooling, the selected agent CLIs, RTK, and Archify. No agent is
+   authenticated yet, so post-create deliberately defers Superpowers setup,
+   prints what to run, and exits successfully.
 3. **Authenticate.** Start `gemini` once and complete its sign-in flow if you
    selected it, then run the logins for the tools you selected:
 
    ```bash
-   gh auth login
-   claude auth login
-   codex login
+   gh auth login        # always
+   claude auth login    # if claude is in AGENT_TOOLS
+   codex login          # if codex is in AGENT_TOOLS
    ```
 
 4. **Rerun post-create.** This installs or enables Superpowers through each
@@ -61,7 +60,12 @@ Container**.
    ```
 
    Checks for unselected tools report `SKIP`; a selected tool that is not yet
-   configured reports a failure, which is the expected result before step 3.
+   configured reports a failure, which is the expected result if you run this
+   before completing steps 3 and 4.
+
+Changing `AGENT_TOOLS` after the container is already built requires **Dev
+Containers: Rebuild Container** so Compose re-reads `devcontainer.env`,
+followed by rerunning `bash .devcontainer/post-create.sh`.
 
 Complete the OMP provider setup if OMP asks for it after authentication.
 Credentials and configuration stay in this project's state volumes; they are
