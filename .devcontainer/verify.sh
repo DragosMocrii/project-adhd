@@ -5,6 +5,8 @@ CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 export CLAUDE_CONFIG_DIR
 export PATH="$HOME/.bun/bin:$HOME/.local/bin:${PATH:-}"
 
+LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/lib" && pwd)"
+
 fail() {
   printf 'verify: %s\n' "$*" >&2
   exit 1
@@ -18,84 +20,16 @@ require_command() {
 }
 
 check_claude_plugin() {
-  local plugin_json
+  local plugin_json state
+
   if ! plugin_json="$(claude plugin list --json)"; then
     fail 'claude plugin list --json failed'
   fi
-
-  # shellcheck disable=SC2016
-  if ! printf '%s' "$plugin_json" | bun -e '
-const expectedId = "superpowers@claude-plugins-official";
-let document;
-try {
-  document = JSON.parse(await Bun.stdin.text());
-} catch (error) {
-  console.error(`Unable to parse Claude plugin list JSON: ${error instanceof Error ? error.message : String(error)}`);
-  process.exit(1);
-}
-
-function collectEntries(value) {
-  if (Array.isArray(value)) {
-    return value.flatMap((entry) =>
-      entry && typeof entry === "object" ? collectEntries(entry) : [entry],
-    );
-  }
-  if (!value || typeof value !== "object") return [];
-
-  const entries = [];
-  for (const key of ["plugins", "installedPlugins", "installed", "items", "data"]) {
-    if (key in value) entries.push(...collectEntries(value[key]));
-  }
-
-  if (
-    ["id", "pluginId", "name", "slug"].some((key) => typeof value[key] === "string") ||
-    (value.plugin && typeof value.plugin === "object" && typeof value.plugin.id === "string")
-  ) {
-    entries.push(value);
-  }
-
-  if (entries.length === 0) {
-    for (const [key, child] of Object.entries(value)) {
-      if (key === expectedId) {
-        entries.push(
-          child && typeof child === "object" && !Array.isArray(child)
-            ? { ...child, id: expectedId }
-            : { id: expectedId, installed: child },
-        );
-      }
-    }
-  }
-  return entries;
-}
-
-function identifiers(entry) {
-  if (typeof entry === "string") return [entry];
-  if (!entry || typeof entry !== "object") return [];
-  return [entry.id, entry.pluginId, entry.plugin?.id, entry.name, entry.slug]
-    .filter((value) => typeof value === "string");
-}
-
-const plugin = collectEntries(document).find((entry) =>
-  identifiers(entry).some((identifier) => identifier === expectedId),
-);
-if (!plugin) {
-  console.error(`Claude plugin ${expectedId} is missing`);
-  process.exit(1);
-}
-
-const metadata = plugin && typeof plugin === "object" ? plugin : {};
-const status = String(metadata.status ?? metadata.state ?? "").toLowerCase();
-const disabled = metadata.enabled === false ||
-  metadata.enabled === "false" ||
-  metadata.isEnabled === false ||
-  metadata.disabled === true ||
-  ["disabled", "off", "inactive"].includes(status);
-if (disabled) {
-  console.error(`Claude plugin ${expectedId} is disabled`);
-  process.exit(1);
-}
-' >/dev/null; then
-    fail 'Claude plugin superpowers@claude-plugins-official is missing or disabled'
+  if ! state="$(printf '%s' "$plugin_json" | bun "$LIB_DIR/claude-plugins.ts" state)"; then
+    fail 'unable to parse Claude plugin metadata'
+  fi
+  if [[ "$state" != enabled ]]; then
+    fail "Claude plugin superpowers@claude-plugins-official is $state"
   fi
 }
 
@@ -171,85 +105,15 @@ if (!found) {
 }
 
 check_codex_plugin() {
-  local plugin_json
+  local plugin_json state required_file
+
   if ! plugin_json="$(codex plugin list --json)"; then
     fail 'codex plugin list --json failed'
   fi
-
-  # shellcheck disable=SC2016
-  if ! printf '%s' "$plugin_json" | bun -e '
-const expectedIds = new Set([
-  "superpowers",
-  "superpowers@openai-curated",
-  "superpowers@openai-api-curated",
-]);
-let document;
-try {
-  document = JSON.parse(await Bun.stdin.text());
-} catch (error) {
-  console.error(`Unable to parse Codex plugin list JSON: ${error instanceof Error ? error.message : String(error)}`);
-  process.exit(1);
-}
-
-function collectEntries(value) {
-  if (Array.isArray(value)) {
-    return value.flatMap((entry) =>
-      entry && typeof entry === "object" ? collectEntries(entry) : [entry],
-    );
-  }
-  if (!value || typeof value !== "object") return [];
-
-  const entries = [];
-  for (const key of ["plugins", "installedPlugins", "installed", "items", "data"]) {
-    if (key in value) entries.push(...collectEntries(value[key]));
-  }
-  if (
-    ["id", "pluginId", "name", "slug", "package"].some((key) => typeof value[key] === "string") ||
-    (value.plugin && typeof value.plugin === "object" && typeof value.plugin.id === "string")
-  ) {
-    entries.push(value);
-  }
-
-  if (entries.length === 0) {
-    for (const [key, child] of Object.entries(value)) {
-      if (expectedIds.has(key)) {
-        entries.push(
-          child && typeof child === "object" && !Array.isArray(child)
-            ? { ...child, id: key }
-            : { id: key, installed: child },
-        );
-      }
-    }
-  }
-  return entries;
-}
-
-function identifiers(entry) {
-  if (typeof entry === "string") return [entry];
-  if (!entry || typeof entry !== "object") return [];
-  return [entry.id, entry.pluginId, entry.name, entry.slug, entry.package, entry.plugin?.id]
-    .filter((value) => typeof value === "string");
-}
-
-function isInstalled(entry) {
-  if (!entry || typeof entry !== "object") return true;
-  const status = String(entry.status ?? entry.state ?? "")
-    .toLowerCase()
-    .replaceAll("_", "-")
-    .replaceAll(" ", "-");
-  return entry.installed !== false &&
-    entry.installed !== "false" &&
-    !["not-installed", "uninstalled", "available"].includes(status);
-}
-
-const installed = collectEntries(document).some((entry) =>
-  identifiers(entry).some((identifier) => expectedIds.has(identifier)) && isInstalled(entry),
-);
-if (!installed) {
-  console.error("Codex installed plugin list does not contain superpowers");
-  process.exit(1);
-}
-' >/dev/null; then
+  if ! state="$(printf '%s' "$plugin_json" | bun "$LIB_DIR/codex-plugins.ts" state)"; then
+    fail 'unable to parse Codex plugin metadata'
+  fi
+  if [[ "$state" != installed ]]; then
     fail 'Codex installed plugin list does not contain superpowers'
   fi
 
@@ -261,104 +125,20 @@ if (!installed) {
 }
 
 check_omp_plugin() {
-  local plugin_json install_path
+  local plugin_json install_path extension
+
   if ! plugin_json="$(omp plugin list --json)"; then
     fail 'omp plugin list --json failed'
   fi
-
-  # shellcheck disable=SC2016
-  if ! install_path="$(printf '%s' "$plugin_json" | bun -e '
-const expectedId = "superpowers";
-let document;
-try {
-  document = JSON.parse(await Bun.stdin.text());
-} catch (error) {
-  console.error(`Unable to parse OMP plugin list JSON: ${error instanceof Error ? error.message : String(error)}`);
-  process.exit(1);
-}
-
-function collectEntries(value) {
-  if (Array.isArray(value)) {
-    return value.flatMap((entry) =>
-      entry && typeof entry === "object" ? collectEntries(entry) : [entry],
-    );
-  }
-  if (!value || typeof value !== "object") return [];
-
-  const entries = [];
-  for (const key of ["plugins", "npm", "installedPlugins", "installed", "items", "data"]) {
-    if (key in value) entries.push(...collectEntries(value[key]));
-  }
-  if (
-    ["id", "pluginId", "name", "slug", "package"].some((key) => typeof value[key] === "string") ||
-    (value.plugin && typeof value.plugin === "object" && typeof value.plugin.id === "string")
-  ) {
-    entries.push(value);
-  }
-  if (entries.length === 0) {
-    for (const [key, child] of Object.entries(value)) {
-      if (key === expectedId) {
-        entries.push(
-          child && typeof child === "object" && !Array.isArray(child)
-            ? { ...child, name: expectedId }
-            : { name: expectedId, installed: child },
-        );
-      }
-    }
-  }
-  return entries;
-}
-
-function identifiers(entry) {
-  if (typeof entry === "string") return [entry];
-  if (!entry || typeof entry !== "object") return [];
-  return [entry.id, entry.pluginId, entry.name, entry.slug, entry.package, entry.plugin?.id]
-    .filter((value) => typeof value === "string");
-}
-
-function isDisabled(entry) {
-  if (!entry || typeof entry !== "object") return false;
-  const status = String(entry.status ?? entry.state ?? "").toLowerCase();
-  return entry.enabled === false ||
-    entry.enabled === "false" ||
-    entry.disabled === true ||
-    ["disabled", "off", "inactive"].includes(status);
-}
-
-function installPath(entry) {
-  if (!entry || typeof entry !== "object") return "";
-  for (const key of ["path", "installPath", "packagePath", "root", "location"]) {
-    if (typeof entry[key] === "string" && entry[key].length > 0) return entry[key];
-  }
-  if (entry.plugin && typeof entry.plugin === "object") return installPath(entry.plugin);
-  return "";
-}
-
-const plugin = collectEntries(document).find((entry) =>
-  identifiers(entry).some((identifier) => identifier === expectedId),
-);
-if (!plugin || typeof plugin !== "object") {
-  console.error("OMP plugin list does not contain superpowers");
-  process.exit(1);
-}
-if (isDisabled(plugin)) {
-  console.error("OMP superpowers plugin is disabled");
-  process.exit(1);
-}
-const path = installPath(plugin);
-if (!path) {
-  console.error("OMP superpowers plugin has no install path");
-  process.exit(1);
-}
-process.stdout.write(path);
-' )"; then
+  if ! install_path="$(printf '%s' "$plugin_json" | bun "$LIB_DIR/omp-plugins.ts" installPath)"; then
     fail 'OMP plugin list does not contain an enabled superpowers plugin with an install path'
   fi
-  if [[ ! -f "$install_path/skills/using-superpowers/SKILL.md" || ! -r "$install_path/skills/using-superpowers/SKILL.md" ]]; then
+  if [[ ! -f "$install_path/skills/using-superpowers/SKILL.md" ||
+    ! -r "$install_path/skills/using-superpowers/SKILL.md" ]]; then
     fail "OMP superpowers package is missing skills/using-superpowers/SKILL.md: $install_path"
   fi
 
-  local extension="$HOME/.omp/agent/extensions/rtk.ts"
+  extension="$HOME/.omp/agent/extensions/rtk.ts"
   if [[ ! -f "$extension" || ! -r "$extension" ]]; then
     fail "OMP RTK extension is missing or unreadable: $extension"
   fi
