@@ -795,3 +795,13 @@ test("documents AGENT_TOOLS in the tracked environment example", async () => {
   expect(example).toContain("AGENT_TOOLS");
   expect(example).toContain("claude,codex,gemini,omp");
 });
+
+test("documents a create command that works for someone who is not the repository owner", async () => {
+  const readme = await readFile(join(scaffoldRoot, "README.md"), "utf8");
+
+  expect(readme).toContain("--template DragosMocrii/project-adhd");
+  expect(readme).not.toContain("gh api user --jq .login");
+  expect(readme).not.toContain('"$OWNER/project-adhd"');
+  expect(readme).toContain("AGENT_TOOLS");
+  expect(readme).toContain("SECURITY.md");
+});
