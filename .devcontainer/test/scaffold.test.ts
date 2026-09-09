@@ -32,19 +32,20 @@ async function run(
   cwd: string,
   env?: Record<string, string>,
 ): Promise<CommandResult> {
-  const mergedEnv = env === undefined
-    ? undefined
-    : {
-        ...Object.fromEntries(
-          Object.entries(process.env).filter(
-            (entry): entry is [string, string] => entry[1] !== undefined,
-          ),
-        ),
-        ...env,
-      };
+  const mergedEnv: Record<string, string> = {
+    ...Object.fromEntries(
+      Object.entries(process.env).filter(
+        (entry): entry is [string, string] => entry[1] !== undefined,
+      ),
+    ),
+    ...env,
+  };
+  if (env?.AGENT_TOOLS === undefined) {
+    delete mergedEnv.AGENT_TOOLS;
+  }
   const childProcess = Bun.spawn(command, {
     cwd,
-    ...(mergedEnv === undefined ? {} : { env: mergedEnv }),
+    env: mergedEnv,
     stdout: "pipe",
     stderr: "pipe",
   });
