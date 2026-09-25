@@ -134,6 +134,7 @@ test("documents AGENT_TOOLS in the tracked environment example", async () => {
   );
   expect(example).toContain("AGENT_TOOLS");
   expect(example).toContain("claude,codex,gemini,omp");
+  expect(example).toContain("AGENT_STATE_SCOPE");
 });
 
 test("documents a create command that works for someone who is not the repository owner", async () => {
