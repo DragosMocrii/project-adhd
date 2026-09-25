@@ -38,9 +38,9 @@ selected and authenticated.
 ## Verifying a change
 
 ```bash
-(cd .devcontainer && bun test)
-(cd .devcontainer && bun run typecheck)
-shellcheck .devcontainer/*.sh .devcontainer/lib/agent-tools.sh
+bun test
+bun run typecheck
+shellcheck .devcontainer/project-adhd/*.sh .devcontainer/project-adhd/lib/agent-tools.sh
 ```
 
 Note: `shellcheck` is not preinstalled in the container image. CI runs it on

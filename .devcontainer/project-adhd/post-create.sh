@@ -309,7 +309,7 @@ configure_superpowers() {
   fi
 
   if (( deferred > 0 )); then
-    echo '    After authenticating, rerun: bash .devcontainer/post-create.sh'
+    echo '    After authenticating, rerun: bash .devcontainer/project-adhd/post-create.sh'
   fi
 }
 

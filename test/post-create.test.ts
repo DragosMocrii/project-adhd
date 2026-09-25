@@ -79,7 +79,7 @@ test("runs pre-login post-create successfully while still installing auth-free A
     expect(result.stdout).toContain("Superpowers setup deferred");
     expect(result.stdout).toContain("deferred for claude");
     expect(result.stdout).toContain("deferred for codex");
-    expect(result.stdout).toContain("bash .devcontainer/post-create.sh");
+    expect(result.stdout).toContain("bash .devcontainer/project-adhd/post-create.sh");
     for (const destination of [
       join(home, ".claude/skills/archify/SKILL.md"),
       join(home, ".codex/skills/archify/SKILL.md"),
@@ -210,7 +210,7 @@ test("installs and configures only the selected agent tool", async () => {
     expect(result.stdout).toContain("Superpowers setup deferred");
     expect(result.stdout).toContain("deferred for claude");
     expect(result.stdout).not.toContain("deferred for codex");
-    expect(result.stdout).toContain("bash .devcontainer/post-create.sh");
+    expect(result.stdout).toContain("bash .devcontainer/project-adhd/post-create.sh");
     expect(existsSync(npmMarker)).toBe(false);
     expect(await readFile(join(home, ".claude/skills/archify/SKILL.md"), "utf8")).toBe("archify\n");
     expect(existsSync(join(home, ".codex/skills/archify"))).toBe(false);

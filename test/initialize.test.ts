@@ -5,7 +5,7 @@ import { isAbsolute, join } from "node:path";
 import { checked, hostBash, prepareRepository, run, withTemporaryParent } from "./helpers";
 
 async function runInitializer(root: string): Promise<void> {
-  const result = await run([hostBash, join(root, ".devcontainer", "initialize.sh"), root], root);
+  const result = await run([hostBash, join(root, ".devcontainer", "project-adhd", "initialize.sh"), root], root);
   if (result.exitCode !== 0) {
     throw new Error(
       `initializer failed with exit code ${result.exitCode}\n${result.stdout}${result.stderr}`,
@@ -14,7 +14,7 @@ async function runInitializer(root: string): Promise<void> {
 }
 
 async function readStatePrefix(root: string): Promise<string> {
-  const contents = await readFile(join(root, ".devcontainer", ".env"), "utf8");
+  const contents = await readFile(join(root, ".devcontainer", "project-adhd", ".env"), "utf8");
   const match = /^PROJECT_STATE_PREFIX=(.+)\n$/.exec(contents);
   if (match === null) {
     throw new Error(`invalid initializer state file:\n${contents}`);
@@ -44,7 +44,7 @@ test("normalizes the repository name and hashes its canonical Git common directo
       .digest("hex")
       .slice(0, 8);
     expect(await readStatePrefix(root)).toBe(`my-project-${expectedId}`);
-    expect(await readFile(join(root, ".devcontainer", "devcontainer.env"), "utf8")).toBe("");
+    expect(await readFile(join(root, ".devcontainer", "project-adhd", "devcontainer.env"), "utf8")).toBe("");
   });
 });
 
@@ -98,7 +98,7 @@ test("fails instead of switching volumes when canonical and worktree prefixes co
     );
 
     const result = await run(
-      [hostBash, join(root, ".devcontainer", "initialize.sh"), root],
+      [hostBash, join(root, ".devcontainer", "project-adhd", "initialize.sh"), root],
       root,
     );
     expect(result.exitCode).not.toBe(0);
@@ -112,7 +112,7 @@ test("rejects a valid prefix followed by an unterminated extra state line", asyn
     await mkdir(root);
     await prepareRepository(root);
     await writeFile(
-      join(root, ".devcontainer", ".env"),
+      join(root, ".devcontainer", "project-adhd", ".env"),
       "PROJECT_STATE_PREFIX=malformed-state-1234abcd\ntrailing-junk",
     );
 
@@ -152,8 +152,8 @@ test("preserves a valid state prefix and an existing devcontainer secret on reru
     const root = join(parent, "preserved-state");
     await mkdir(root);
     await prepareRepository(root);
-    const statePath = join(root, ".devcontainer", ".env");
-    const secretPath = join(root, ".devcontainer", "devcontainer.env");
+    const statePath = join(root, ".devcontainer", "project-adhd", ".env");
+    const secretPath = join(root, ".devcontainer", "project-adhd", "devcontainer.env");
     const preservedPrefix = "preserved-state-1234abcd";
     const secret = "CONTEXT7_API_KEY=keep-this-secret\n";
     await writeFile(statePath, `${"PROJECT_STATE_PREFIX="}${preservedPrefix}\n`);
