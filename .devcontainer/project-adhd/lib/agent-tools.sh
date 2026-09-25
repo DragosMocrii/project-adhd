@@ -5,6 +5,8 @@
 # Unset or empty selects every known tool, so an unconfigured project
 # behaves exactly as it did before selection existed.
 #
+# Sourced on the host by adhd as well, so it must stay bash 3.2-compatible.
+#
 # This file is sourced, never executed.
 
 AGENT_TOOLS_KNOWN=(claude codex gemini omp)
@@ -21,11 +23,49 @@ agent_tools_join() {
   printf '%s' "${joined%, }"
 }
 
+agent_tools_lowercase() {
+  local input="$1"
+  local result=""
+  local i char
+  for ((i = 0; i < ${#input}; i++)); do
+    char="${input:$i:1}"
+    case "$char" in
+      A) result="${result}a" ;;
+      B) result="${result}b" ;;
+      C) result="${result}c" ;;
+      D) result="${result}d" ;;
+      E) result="${result}e" ;;
+      F) result="${result}f" ;;
+      G) result="${result}g" ;;
+      H) result="${result}h" ;;
+      I) result="${result}i" ;;
+      J) result="${result}j" ;;
+      K) result="${result}k" ;;
+      L) result="${result}l" ;;
+      M) result="${result}m" ;;
+      N) result="${result}n" ;;
+      O) result="${result}o" ;;
+      P) result="${result}p" ;;
+      Q) result="${result}q" ;;
+      R) result="${result}r" ;;
+      S) result="${result}s" ;;
+      T) result="${result}t" ;;
+      U) result="${result}u" ;;
+      V) result="${result}v" ;;
+      W) result="${result}w" ;;
+      X) result="${result}x" ;;
+      Y) result="${result}y" ;;
+      Z) result="${result}z" ;;
+      *) result="${result}${char}" ;;
+    esac
+  done
+  printf '%s' "$result"
+}
+
 agent_tools_init() {
   local raw="${AGENT_TOOLS-}"
-  local token known valid
+  local token known valid seen=' '
   local -a tokens=() normalized=()
-  local -A seen=()
 
   raw=${raw//,/ }
   read -r -a tokens <<< "$raw"
@@ -36,7 +76,7 @@ agent_tools_init() {
   fi
 
   for token in "${tokens[@]}"; do
-    token="${token,,}"
+    token=$(agent_tools_lowercase "$token")
     valid=false
     for known in "${AGENT_TOOLS_KNOWN[@]}"; do
       if [[ "$token" == "$known" ]]; then
@@ -47,11 +87,11 @@ agent_tools_init() {
     if [[ "$valid" != true ]]; then
       agent_tools_die "unknown tool '$token' (valid: $(agent_tools_join "${AGENT_TOOLS_KNOWN[@]}"))"
     fi
-    seen["$token"]=1
+    seen="$seen$token "
   done
 
   for known in "${AGENT_TOOLS_KNOWN[@]}"; do
-    if [[ -n "${seen[$known]-}" ]]; then
+    if [[ "$seen" == *" $known "* ]]; then
       normalized+=("$known")
     fi
   done
