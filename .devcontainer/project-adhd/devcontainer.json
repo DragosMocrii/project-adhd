@@ -2,7 +2,7 @@
   "name": "project-adhd",
   "dockerComposeFile": "docker-compose.yml",
   "service": "workspace",
-  "workspaceFolder": "/workspace",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
   "features": {
     "ghcr.io/devcontainers-extra/features/bun:1": {
       "version": "1.4.0"
