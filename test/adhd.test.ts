@@ -402,3 +402,93 @@ test("new creates a private repository with gh and attaches it tracked", async (
     expect(privateRepo.stdout).toContain('git commit -m "chore: add project-adhd dev container"');
   });
 });
+
+test("detach restores an untracked attachment exactly", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout } = await makeInstallation(parent);
+    const root = join(parent, "round-trip");
+    await makeRepo(root);
+    const exclude = join(root, ".git/info/exclude");
+    // Some git installs ship no templates, so info/exclude may not exist yet.
+    const readExclude = async () => (existsSync(exclude) ? readFile(exclude, "utf8") : "");
+    const excludeBefore = await readExclude();
+    const statusBefore = await status(root);
+    expect((await adhd(checkout, ["attach", root, "--agents", "claude"], parent)).exitCode).toBe(0);
+
+    const result = await adhd(checkout, ["detach"], root);
+
+    expect(result.exitCode).toBe(0);
+    expect(existsSync(join(root, ".devcontainer"))).toBe(false);
+    expect(await readExclude()).toBe(excludeBefore);
+    expect(await status(root)).toBe(statusBefore);
+    expect(result.stdout).toContain("docker volume ls");
+  });
+});
+
+test("detach removes a tracked attachment's root .gitignore block", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout } = await makeInstallation(parent);
+    const root = join(parent, "tracked-detach");
+    await makeRepo(root, { ".gitignore": "node_modules/\n" });
+    expect((await adhd(checkout, ["attach", root, "--track", "--agents", "claude"], parent)).exitCode).toBe(0);
+
+    expect((await adhd(checkout, ["detach", root], parent)).exitCode).toBe(0);
+
+    expect(await readFile(join(root, ".gitignore"), "utf8")).toBe("node_modules/\n");
+    expect(await status(root)).toBe("");
+  });
+});
+
+test("detach refuses a runtime folder adhd did not create", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout } = await makeInstallation(parent);
+    const root = join(parent, "foreign-detach");
+    await makeRepo(root, { [`${RUNTIME}/devcontainer.json`]: "{}\n" });
+
+    const result = await adhd(checkout, ["detach", root], parent);
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("was not created by adhd");
+    expect(existsSync(join(root, RUNTIME, "devcontainer.json"))).toBe(true);
+  });
+});
+
+test("detach keeps the shared exclude block while another worktree is attached", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout } = await makeInstallation(parent);
+    const root = join(parent, "main-wt");
+    const linked = join(parent, "linked-wt");
+    await makeRepo(root);
+    await checked(["git", "-C", root, "worktree", "add", "-q", linked, "-b", "feature/x"], root);
+    expect((await adhd(checkout, ["attach", root, "--agents", "claude"], parent)).exitCode).toBe(0);
+    expect((await adhd(checkout, ["attach", linked, "--agents", "claude"], parent)).exitCode).toBe(0);
+    const exclude = join(root, ".git/info/exclude");
+
+    expect((await adhd(checkout, ["detach", root], parent)).exitCode).toBe(0);
+    expect(await readFile(exclude, "utf8")).toContain("# >>> project-adhd");
+
+    expect((await adhd(checkout, ["detach", linked], parent)).exitCode).toBe(0);
+    expect(await readFile(exclude, "utf8")).not.toContain("# >>> project-adhd");
+  });
+});
+
+test("update fast-forwards the installation", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout, origin } = await makeInstallation(parent);
+    const other = join(parent, "other-clone");
+    await checked(["git", "clone", "-q", origin, other], parent);
+    await writeFile(join(other, "NEWS"), "new\n");
+    await checked(["git", "-C", other, "add", "NEWS"], other);
+    await checked(
+      ["git", "-C", other, "-c", "user.email=t@example.invalid", "-c", "user.name=t", "commit", "-q", "-m", "news"],
+      other,
+    );
+    await checked(["git", "-C", other, "push", "-q", "origin", "HEAD"], other);
+
+    const result = await adhd(checkout, ["update"], parent);
+
+    expect(result.exitCode).toBe(0);
+    expect(existsSync(join(checkout, "NEWS"))).toBe(true);
+    expect(result.stdout).toContain("adhd attach");
+  });
+});
