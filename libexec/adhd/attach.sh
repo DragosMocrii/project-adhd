@@ -41,32 +41,75 @@ choose_agents() {
   ATTACH_AGENTS=$(selected_agents_csv)
 }
 
-# copy_runtime <runtime>: copies every runtime file, printing one sha line each.
+in_manifest() {
+  local candidate=$1 file
+
+  for file in "${ADHD_RUNTIME_FILES[@]}"; do
+    [[ "$file" == "$candidate" ]] && return 0
+  done
+  return 1
+}
+
+# copy_runtime <runtime> <marker>: copies every runtime file, printing one sha
+# line each. A file whose checksum differs from the marker's (the user edited
+# it) is kept; the new version is written beside it as <file>.adhd-new.
 copy_runtime() {
-  local runtime=$1 file source destination
+  local runtime=$1 marker=$2 file source destination recorded
 
   for file in "${ADHD_RUNTIME_FILES[@]}"; do
     source="$ADHD_RUNTIME_SOURCE/$file"
     destination="$runtime/$file"
     [[ -f "$source" ]] || die "the installation is incomplete (missing $source); run: adhd update"
     mkdir -p "$(dirname "$destination")"
+    if [[ -f "$destination" ]] && recorded=$(marker_get "$marker" "sha:$file") &&
+      [[ "$(file_sha256 "$destination")" != "$recorded" ]]; then
+      cp -p "$source" "$destination.adhd-new"
+      warn "kept your edited $ADHD_RUNTIME_REL/$file; the new version is $file.adhd-new"
+      printf 'sha:%s=%s\n' "$file" "$recorded"
+      continue
+    fi
     cp -p "$source" "$destination"
     printf 'sha:%s=%s\n' "$file" "$(file_sha256 "$destination")"
   done
 }
 
-# write_marker <runtime> <mode>: copies the runtime and records what was written.
+# prune_removed <runtime> <marker>: deletes files the marker lists that are no
+# longer in the manifest, unless the user edited them.
+prune_removed() {
+  local runtime=$1 marker=$2 line file recorded
+
+  [[ -f "$marker" ]] || return 0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    case "$line" in
+      sha:*) ;;
+      *) continue ;;
+    esac
+    file=${line#sha:}
+    file=${file%%=*}
+    recorded=${line#*=}
+    in_manifest "$file" && continue
+    [[ -f "$runtime/$file" ]] || continue
+    if [[ "$(file_sha256 "$runtime/$file")" == "$recorded" ]]; then
+      rm -f -- "$runtime/$file"
+    else
+      warn "kept $ADHD_RUNTIME_REL/$file: project-adhd no longer ships it, but you edited it"
+    fi
+  done < "$marker"
+}
+
+# write_marker <runtime> <mode>: refreshes the runtime and records what was written.
 write_marker() {
-  local runtime=$1 mode=$2 body revision
+  local runtime=$1 mode=$2 marker="$1/.adhd" body revision
 
   body=$(mktemp "$runtime/.adhd.XXXXXX") || die "unable to create a temporary file in $runtime"
   revision=$(git -C "$ADHD_HOME" rev-parse HEAD 2>/dev/null) || revision=unknown
   {
     printf 'mode=%s\n' "$mode"
     printf 'source=%s\n' "$revision"
-    copy_runtime "$runtime"
+    copy_runtime "$runtime" "$marker"
   } > "$body"
-  mv -f -- "$body" "$runtime/.adhd"
+  prune_removed "$runtime" "$marker"
+  mv -f -- "$body" "$marker"
 }
 
 # write_ignore_rules <root> <runtime> <mode>
