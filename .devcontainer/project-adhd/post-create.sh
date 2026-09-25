@@ -369,7 +369,8 @@ with_shared_state_lock() {
     flock -w "$POST_CREATE_LOCK_TIMEOUT" 9 ||
       die "timed out after ${POST_CREATE_LOCK_TIMEOUT}s waiting for $POST_CREATE_LOCK_FILE"
   fi
-  "$@"
+  # 9>&- keeps the lock fd out of child processes, so a stray background child cannot pin it.
+  "$@" 9>&-
   flock -u 9
   exec 9>&-
 }
