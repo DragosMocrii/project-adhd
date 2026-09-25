@@ -27,11 +27,10 @@ report.*.json
 .cache/
 *.tsbuildinfo
 
-# Project-local worktrees and Superpowers state
+# Project-local worktrees and Superpowers state (specs and plans under docs/superpowers/ are tracked)
 /.worktrees/
 /.claude/worktrees/
 /.superpowers/
-/docs/superpowers/
 
 # IDE state
 .idea/
