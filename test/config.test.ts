@@ -45,23 +45,30 @@ test("ignores local state files inside the runtime folder only", async () => {
   });
 });
 
-test("renders one Compose workspace with seven explicit state volumes and no published ports", async () => {
+test("renders a per-worktree Compose project with shared agent volumes read from .env", async () => {
   await withTemporaryParent(async (parent) => {
-    const root = join(parent, "compose-contract");
-    await mkdir(join(root, ".devcontainer", "project-adhd"), { recursive: true });
-    await copyFile(composePath, join(root, ".devcontainer", "project-adhd", "docker-compose.yml"));
-    await writeFile(join(root, ".devcontainer", "project-adhd", "devcontainer.env"), "");
-    const prefix = "compose-contract-test";
+    const root = join(parent, "My Project");
+    const runtime = join(root, ".devcontainer", "project-adhd");
+    await mkdir(runtime, { recursive: true });
+    await copyFile(composePath, join(runtime, "docker-compose.yml"));
+    await writeFile(join(runtime, "devcontainer.env"), "");
+    await writeFile(
+      join(runtime, ".env"),
+      "PROJECT_STATE_PREFIX=my-project-1234abcd\n" +
+        "COMPOSE_INSTANCE=my-project-1234abcd-9f9f9f9f\n" +
+        "AGENT_STATE_PREFIX=project-adhd-shared\n" +
+        "WORKSPACE_NAME=My Project\n",
+    );
     const result = await run(
       ["docker", "compose", "-f", ".devcontainer/project-adhd/docker-compose.yml", "config", "--format", "json"],
       root,
-      { PROJECT_STATE_PREFIX: prefix },
     );
     if (result.exitCode !== 0) {
       throw new Error(`docker compose config failed:\n${result.stdout}${result.stderr}`);
     }
 
     type ComposeConfig = {
+      name?: string;
       services?: Record<string, {
         ports?: unknown[];
         volumes?: Array<{ source?: string; target?: string; type?: string }>;
@@ -69,38 +76,42 @@ test("renders one Compose workspace with seven explicit state volumes and no pub
       volumes?: Record<string, { name?: string }>;
     };
     const config = JSON.parse(result.stdout) as ComposeConfig;
+    expect(config.name).toBe("my-project-1234abcd-9f9f9f9f");
+
     const expectedVolumes = {
-      "claude-state": `${prefix}-claude`,
-      "github-state": `${prefix}-gh`,
-      "rtk-config-state": `${prefix}-rtk-config`,
-      "rtk-data-state": `${prefix}-rtk-data`,
-      "codex-state": `${prefix}-codex`,
-      "gemini-state": `${prefix}-gemini`,
-      "omp-state": `${prefix}-omp`,
+      "claude-state": "project-adhd-shared-claude",
+      "github-state": "project-adhd-shared-gh",
+      "rtk-config-state": "project-adhd-shared-rtk-config",
+      "rtk-data-state": "my-project-1234abcd-rtk-data",
+      "codex-state": "project-adhd-shared-codex",
+      "gemini-state": "project-adhd-shared-gemini",
+      "omp-state": "project-adhd-shared-omp",
+      "lock-state": "project-adhd-shared-lock",
     };
-    expect(Object.keys(config.volumes ?? {}).sort()).toEqual(
-      Object.keys(expectedVolumes).sort(),
-    );
+    expect(Object.keys(config.volumes ?? {}).sort()).toEqual(Object.keys(expectedVolumes).sort());
     for (const [logicalName, explicitName] of Object.entries(expectedVolumes)) {
       expect(config.volumes?.[logicalName]?.name).toBe(explicitName);
     }
 
     const workspace = config.services?.workspace;
-    expect(workspace).toBeDefined();
     expect(workspace?.ports ?? []).toHaveLength(0);
-    const mounts = new Map(
-      (workspace?.volumes ?? []).map((mount) => [mount.target, mount]),
-    );
-    expect(mounts.get("/home/vscode/.gemini")?.source).toBe("gemini-state");
-    expect(mounts.get("/home/vscode/.config/rtk")?.source).toBe("rtk-config-state");
+    const mounts = new Map((workspace?.volumes ?? []).map((mount) => [mount.target, mount]));
+    expect(mounts.get("/home/vscode/.local/state/project-adhd")?.source).toBe("lock-state");
     expect(mounts.get("/home/vscode/.local/share/rtk")?.source).toBe("rtk-data-state");
-    expect(
-      (workspace?.volumes ?? [])
-        .filter((mount) => mount.type === "volume")
-        .map((mount) => mount.source)
-        .sort(),
-    ).toEqual(Object.keys(expectedVolumes).sort());
+    const bind = mounts.get("/workspaces/My Project");
+    expect(bind?.type).toBe("bind");
+    expect(bind?.source).toBe(root);
   });
+});
+
+test("opens the workspace at /workspaces/<folder> with runtime-folder lifecycle commands", async () => {
+  const config = JSON.parse(await readFile(devcontainerConfigPath, "utf8")) as Record<string, unknown>;
+  expect(config.workspaceFolder).toBe("/workspaces/${localWorkspaceFolderBasename}");
+  expect(config.initializeCommand).toBe(
+    'bash "${localWorkspaceFolder}/.devcontainer/project-adhd/initialize.sh" "${localWorkspaceFolder}"',
+  );
+  expect(config.postCreateCommand).toBe("bash .devcontainer/project-adhd/post-create.sh");
+  expect(config.updateContentCommand).toBeUndefined();
 });
 
 test("configures Gemini CLI for manual authentication", async () => {
