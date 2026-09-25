@@ -26,6 +26,7 @@ export async function run(
   command: string[],
   cwd: string,
   env?: Record<string, string>,
+  stdin?: string,
 ): Promise<CommandResult> {
   const mergedEnv: Record<string, string> = {
     ...Object.fromEntries(
@@ -41,6 +42,7 @@ export async function run(
   const childProcess = Bun.spawn(command, {
     cwd,
     env: mergedEnv,
+    stdin: stdin === undefined ? "ignore" : new TextEncoder().encode(stdin),
     stdout: "pipe",
     stderr: "pipe",
   });
