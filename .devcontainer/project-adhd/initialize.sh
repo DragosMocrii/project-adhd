@@ -60,7 +60,7 @@ fi
 # WORKSPACE_NAME is written unquoted to Compose's .env, where these characters
 # would be interpolated or start a comment, breaking the mount path.
 case "$workspace_name" in
-  *'$'*|*'"'*|*"'"*|*'\'*|*' #'*)
+  *'$'*|*'"'*|*"'"*|*\\*|*' #'*)
     die "the folder name '$workspace_name' contains \$, a quote, a backslash, or ' #'; rename the folder"
     ;;
 esac
@@ -133,7 +133,7 @@ prefix_pattern='[a-z0-9][a-z0-9-]*-[0-9a-f]{8}'
 read_valid_prefix() {
   local path=$1
   shift
-  local line= first_line= keys= expected_keys= line_count=0 newline_count key
+  local line='' first_line='' keys='' expected_keys='' line_count=0 newline_count key
   READ_PREFIX=
 
   if [[ ! -e "$path" && ! -L "$path" ]]; then
