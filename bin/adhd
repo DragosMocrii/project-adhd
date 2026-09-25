@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# adhd: attach the project-adhd Dev Container to a Git repository.
+# Host code: must stay bash 3.2-compatible with BSD or GNU userland.
+set -euo pipefail
+
+# Prints the directory holding this script, following symlinks without readlink -f.
+script_directory() {
+  local path=$1 directory link
+
+  while [[ -L "$path" ]]; do
+    directory=$(cd -P -- "$(dirname "$path")" && pwd -P)
+    link=$(readlink "$path")
+    case "$link" in
+      /*) path=$link ;;
+      *) path="$directory/$link" ;;
+    esac
+  done
+  cd -P -- "$(dirname "$path")" && pwd -P
+}
+
+ADHD_HOME=$(cd -P -- "$(script_directory "${BASH_SOURCE[0]}")/.." && pwd -P)
+# shellcheck disable=SC1091
+source "$ADHD_HOME/libexec/adhd/common.sh"
+# shellcheck disable=SC1091
+source "$ADHD_RUNTIME_SOURCE/lib/agent-tools.sh"
+
+usage() {
+  cat <<'EOF'
+usage: adhd <command> [arguments]
+
+commands:
+  attach <dir | owner/repo | url> [--agents <list>] [--track]
+  detach [dir]
+  update
+  new <name> [--public] [--agents <list>]
+EOF
+}
+
+main() {
+  local command=${1-}
+
+  case "$command" in
+    attach|detach|update|new)
+      shift
+      # shellcheck disable=SC1090
+      source "$ADHD_HOME/libexec/adhd/$command.sh"
+      "cmd_$command" "$@"
+      ;;
+    -h|--help|help)
+      usage
+      ;;
+    '')
+      usage >&2
+      exit 1
+      ;;
+    *)
+      printf 'adhd: unknown command: %s\n' "$command" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+}
+
+main "$@"

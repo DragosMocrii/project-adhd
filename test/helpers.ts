@@ -1,6 +1,7 @@
+import { existsSync } from "node:fs";
 import { chmod, copyFile, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 export const repoRoot = resolve(import.meta.dir, "..");
 export const runtimeDir = join(repoRoot, ".devcontainer", "project-adhd");
@@ -116,6 +117,48 @@ export async function makeHome(parent: string): Promise<{ home: string; stubBin:
     await mkdir(join(home, directory), { recursive: true });
   }
   return { home, stubBin };
+}
+
+export async function makeRepo(
+  root: string,
+  files: Record<string, string> = { "seed.txt": "seed\n" },
+): Promise<void> {
+  await mkdir(root, { recursive: true });
+  for (const [path, contents] of Object.entries(files)) {
+    await mkdir(dirname(join(root, path)), { recursive: true });
+    await writeFile(join(root, path), contents);
+  }
+  await checked(["git", "init", "-q", "--initial-branch=main"], root);
+  await checked(["git", "config", "user.email", "project-adhd-tests@example.invalid"], root);
+  await checked(["git", "config", "user.name", "project-adhd tests"], root);
+  await checked(["git", "add", "-A"], root);
+  await checked(["git", "commit", "-q", "--allow-empty", "--message=initial"], root);
+}
+
+// A throwaway copy of this checkout's host CLI and runtime folder, committed,
+// pushed to a bare origin, and cloned, so tests can change it and pull.
+export async function makeInstallation(parent: string): Promise<{ checkout: string; origin: string }> {
+  const source = join(parent, "installation-source");
+  const origin = join(parent, "installation-origin.git");
+  const checkout = join(parent, "installation");
+  const listed = await checked(
+    ["git", "ls-files", "--cached", "--others", "--exclude-standard", "--",
+      "bin", "libexec", ".devcontainer/project-adhd", "install.sh"],
+    repoRoot,
+  );
+  await mkdir(source, { recursive: true });
+  for (const file of listed.split("\n").filter(Boolean)) {
+    if (!existsSync(join(repoRoot, file))) continue;
+    await mkdir(dirname(join(source, file)), { recursive: true });
+    await copyFile(join(repoRoot, file), join(source, file));
+  }
+  for (const executable of ["bin/adhd", "install.sh"]) {
+    if (existsSync(join(source, executable))) await chmod(join(source, executable), 0o755);
+  }
+  await makeRepo(source, {});
+  await checked(["git", "clone", "-q", "--bare", source, origin], parent);
+  await checked(["git", "clone", "-q", origin, checkout], parent);
+  return { checkout, origin };
 }
 
 export async function prepareRepository(root: string): Promise<void> {
