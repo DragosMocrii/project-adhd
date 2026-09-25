@@ -11,88 +11,49 @@ import {
   withTemporaryParent,
 } from "./helpers";
 
-test("enforces root-scoped ignore rules for local state", async () => {
+test("ignores local state files inside the runtime folder only", async () => {
   await withTemporaryParent(async (parent) => {
     const root = join(parent, "ignore-rules");
     await mkdir(root);
     await prepareRepository(root);
 
-    const rootScopedRules = [
-      [".devcontainer/.env", "/.devcontainer/.env"],
-      [".devcontainer/devcontainer.env", "/.devcontainer/devcontainer.env"],
+    const folderRules = [
+      [".devcontainer/project-adhd/.env", "/.env"],
+      [".devcontainer/project-adhd/devcontainer.env", "/devcontainer.env"],
+      [".devcontainer/project-adhd/docker-compose.yml.adhd-new", "*.adhd-new"],
     ] as const;
-    for (const [path, rule] of rootScopedRules) {
-      const result = await run(
-        ["git", "check-ignore", "--no-index", "--quiet", "--", path],
-        root,
-      );
-      if (result.exitCode !== 0) {
-        throw new Error(`expected ${path} to be ignored:\n${result.stderr}`);
-      }
+    for (const [path, rule] of folderRules) {
       const details = await run(
         ["git", "check-ignore", "--no-index", "--verbose", "--", path],
         root,
       );
+      expect(details.exitCode).toBe(0);
+      expect(details.stdout).toContain(".devcontainer/project-adhd/.gitignore:");
       expect(details.stdout).toContain(`:${rule}\t${path}`);
     }
 
-    for (const path of [
-      ".worktrees/probe",
-      ".claude/worktrees/probe",
-      ".superpowers/probe",
-    ]) {
-      const result = await run(
-        ["git", "check-ignore", "--no-index", "--quiet", "--", path],
-        root,
-      );
-      if (result.exitCode !== 0) {
-        throw new Error(`expected ${path} to be ignored:\n${result.stderr}`);
-      }
+    for (const path of [".worktrees/probe", ".claude/worktrees/probe", ".superpowers/probe"]) {
+      const result = await run(["git", "check-ignore", "--no-index", "--quiet", "--", path], root);
+      expect(result.exitCode).toBe(0);
     }
 
-    const nestedEnvironmentFile = await run(
-      [
-        "git",
-        "check-ignore",
-        "--no-index",
-        "--verbose",
-        "--",
-        "nested/.devcontainer/.env",
-      ],
+    const nested = await run(
+      ["git", "check-ignore", "--no-index", "--quiet", "--", "nested/.devcontainer/project-adhd/devcontainer.env"],
       root,
     );
-    expect(nestedEnvironmentFile.exitCode).toBe(0);
-    expect(nestedEnvironmentFile.stdout).toContain(
-      ":.env\tnested/.devcontainer/.env",
-    );
-    expect(nestedEnvironmentFile.stdout).not.toContain(
-      ":/.devcontainer/.env\tnested/.devcontainer/.env",
-    );
-
-    const nestedDevcontainerEnvironmentFile = await run(
-      [
-        "git",
-        "check-ignore",
-        "--no-index",
-        "--quiet",
-        "--",
-        "nested/.devcontainer/devcontainer.env",
-      ],
-      root,
-    );
-    expect(nestedDevcontainerEnvironmentFile.exitCode).not.toBe(0);
+    expect(nested.exitCode).not.toBe(0);
   });
 });
 
 test("renders one Compose workspace with seven explicit state volumes and no published ports", async () => {
   await withTemporaryParent(async (parent) => {
     const root = join(parent, "compose-contract");
-    await mkdir(join(root, ".devcontainer"), { recursive: true });
-    await copyFile(composePath, join(root, ".devcontainer", "docker-compose.yml"));
-    await writeFile(join(root, ".devcontainer", "devcontainer.env"), "");
+    await mkdir(join(root, ".devcontainer", "project-adhd"), { recursive: true });
+    await copyFile(composePath, join(root, ".devcontainer", "project-adhd", "docker-compose.yml"));
+    await writeFile(join(root, ".devcontainer", "project-adhd", "devcontainer.env"), "");
     const prefix = "compose-contract-test";
     const result = await run(
-      ["docker", "compose", "-f", ".devcontainer/docker-compose.yml", "config", "--format", "json"],
+      ["docker", "compose", "-f", ".devcontainer/project-adhd/docker-compose.yml", "config", "--format", "json"],
       root,
       { PROJECT_STATE_PREFIX: prefix },
     );
@@ -151,7 +112,7 @@ test("configures Gemini CLI for manual authentication", async () => {
 
 test("presents one aligned project identity and a Bun-matched types pin", async () => {
   const packageManifest = JSON.parse(
-    await readFile(join(runtimeDir, "package.json"), "utf8"),
+    await readFile(join(repoRoot, "package.json"), "utf8"),
   ) as { name?: string; devDependencies?: Record<string, string> };
   const devcontainerConfig = JSON.parse(await readFile(devcontainerConfigPath, "utf8")) as {
     name?: string;

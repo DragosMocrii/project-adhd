@@ -18,13 +18,10 @@ jobs:
         with:
           bun-version: 1.4.0
       - name: Install scaffold dependencies
-        working-directory: .devcontainer
         run: bun install --frozen-lockfile
       - name: Run contract suite
-        working-directory: .devcontainer
         run: bun test
       - name: Typecheck
-        working-directory: .devcontainer
         run: bun run typecheck
 
   shellcheck:
@@ -35,7 +32,7 @@ jobs:
       - name: Lint shell scripts
         run: |
           shellcheck \
-            .devcontainer/initialize.sh \
-            .devcontainer/post-create.sh \
-            .devcontainer/verify.sh \
-            .devcontainer/lib/agent-tools.sh
+            .devcontainer/project-adhd/initialize.sh \
+            .devcontainer/project-adhd/post-create.sh \
+            .devcontainer/project-adhd/verify.sh \
+            .devcontainer/project-adhd/lib/agent-tools.sh

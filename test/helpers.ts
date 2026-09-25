@@ -2,8 +2,9 @@ import { chmod, copyFile, mkdir, mkdtemp, realpath, rm, writeFile } from "node:f
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-export const repoRoot = resolve(import.meta.dir, "../..");
-export const runtimeDir = join(repoRoot, ".devcontainer");
+export const repoRoot = resolve(import.meta.dir, "..");
+export const runtimeDir = join(repoRoot, ".devcontainer", "project-adhd");
+export const runtimeGitignorePath = join(runtimeDir, ".gitignore");
 export const initializerPath = join(runtimeDir, "initialize.sh");
 export const postCreatePath = join(runtimeDir, "post-create.sh");
 export const verifyPath = join(runtimeDir, "verify.sh");
@@ -116,15 +117,17 @@ export async function makeHome(parent: string): Promise<{ home: string; stubBin:
 }
 
 export async function prepareRepository(root: string): Promise<void> {
-  await mkdir(join(root, ".devcontainer"), { recursive: true });
-  await copyFile(initializerPath, join(root, ".devcontainer", "initialize.sh"));
-  await chmod(join(root, ".devcontainer", "initialize.sh"), 0o755);
+  const runtime = join(root, ".devcontainer", "project-adhd");
+  await mkdir(runtime, { recursive: true });
+  await copyFile(initializerPath, join(runtime, "initialize.sh"));
+  await chmod(join(runtime, "initialize.sh"), 0o755);
+  await copyFile(runtimeGitignorePath, join(runtime, ".gitignore"));
   await copyFile(gitignorePath, join(root, ".gitignore"));
   await writeFile(join(root, "seed.txt"), "seed\n");
 
   await checked(["git", "init", "--initial-branch=main"], root);
   await checked(["git", "config", "user.email", "scaffold-tests@example.invalid"], root);
   await checked(["git", "config", "user.name", "Scaffold Tests"], root);
-  await checked(["git", "add", "--", ".devcontainer/initialize.sh", ".gitignore", "seed.txt"], root);
+  await checked(["git", "add", "-A"], root);
   await checked(["git", "commit", "--message=initial"], root);
 }

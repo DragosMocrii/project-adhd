@@ -46,7 +46,7 @@ if ! repo_root=$(canonical_directory "$repo_root_reported"); then
   die "unable to resolve Git repository root: $repo_root_reported"
 fi
 
-devcontainer_dir=$repo_root/.devcontainer
+devcontainer_dir=$repo_root/.devcontainer/project-adhd
 if [[ ! -d "$devcontainer_dir" ]]; then
   die "missing .devcontainer directory in repository: $repo_root"
 fi

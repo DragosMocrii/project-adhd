@@ -13,7 +13,7 @@ services:
       - codex-state:/home/vscode/.codex
       - gemini-state:/home/vscode/.gemini
       - omp-state:/home/vscode/.omp
-      - ..:/workspace:cached
+      - ../..:/workspace:cached
 
 volumes:
   claude-state:

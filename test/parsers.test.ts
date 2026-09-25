@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test";
-import { join, resolve } from "node:path";
-import { marketplaceState as claudeMarketplaceState } from "../lib/claude-marketplaces";
-import { pluginInstallPath as claudeInstallPath, pluginState as claudePluginState } from "../lib/claude-plugins";
-import { marketplaceName as codexMarketplaceName } from "../lib/codex-marketplaces";
-import { pluginState as codexPluginState } from "../lib/codex-plugins";
-import { pluginInstallPath as ompInstallPath } from "../lib/omp-plugins";
+import { join } from "node:path";
+import { marketplaceState as claudeMarketplaceState } from "../.devcontainer/project-adhd/lib/claude-marketplaces";
+import { pluginInstallPath as claudeInstallPath, pluginState as claudePluginState } from "../.devcontainer/project-adhd/lib/claude-plugins";
+import { marketplaceName as codexMarketplaceName } from "../.devcontainer/project-adhd/lib/codex-marketplaces";
+import { pluginState as codexPluginState } from "../.devcontainer/project-adhd/lib/codex-plugins";
+import { pluginInstallPath as ompInstallPath } from "../.devcontainer/project-adhd/lib/omp-plugins";
+import { repoRoot, runtimeDir } from "./helpers";
 import {
   CLAUDE_MARKETPLACES_EMPTY,
   CLAUDE_MARKETPLACES_PRESENT,
@@ -24,8 +25,7 @@ import {
   OMP_PLUGINS_PATHLESS,
 } from "./fixtures/plugin-json";
 
-const scaffoldRoot = resolve(import.meta.dir, "..");
-const postCreatePath = join(scaffoldRoot, "post-create.sh");
+const postCreatePath = join(runtimeDir, "post-create.sh");
 
 type ShellResult = { exitCode: number; stdout: string; stderr: string };
 
@@ -47,7 +47,7 @@ async function callShellParser(
   ];
   if (extraArgument !== undefined) argv.push(extraArgument);
 
-  const child = Bun.spawn(argv, { cwd: scaffoldRoot, stdout: "pipe", stderr: "pipe" });
+  const child = Bun.spawn(argv, { cwd: repoRoot, stdout: "pipe", stderr: "pipe" });
   const [stdout, stderr] = await Promise.all([
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),
@@ -152,7 +152,7 @@ test("omp-plugins module requires an enabled plugin with a path", () => {
 });
 
 test("parser modules honor the stdin/argv CLI contract", async () => {
-  const libDir = join(scaffoldRoot, "lib");
+  const libDir = join(runtimeDir, "lib");
 
   const ok = Bun.spawn(["bun", join(libDir, "claude-plugins.ts"), "state"], {
     stdin: new TextEncoder().encode(JSON.stringify(CLAUDE_PLUGINS_ARRAY)),

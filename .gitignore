@@ -19,8 +19,6 @@ report.*.json
 .env
 .env.*
 !.env.example
-/.devcontainer/.env
-/.devcontainer/devcontainer.env
 
 # Caches
 .eslintcache
