@@ -6,7 +6,6 @@
 # behaves exactly as it did before selection existed.
 #
 # Sourced on the host by adhd as well, so it must stay bash 3.2-compatible.
-#
 # This file is sourced, never executed.
 
 AGENT_TOOLS_KNOWN=(claude codex gemini omp)
@@ -23,45 +22,6 @@ agent_tools_join() {
   printf '%s' "${joined%, }"
 }
 
-agent_tools_lowercase() {
-  local input="$1"
-  local result=""
-  local i char
-  for ((i = 0; i < ${#input}; i++)); do
-    char="${input:$i:1}"
-    case "$char" in
-      A) result="${result}a" ;;
-      B) result="${result}b" ;;
-      C) result="${result}c" ;;
-      D) result="${result}d" ;;
-      E) result="${result}e" ;;
-      F) result="${result}f" ;;
-      G) result="${result}g" ;;
-      H) result="${result}h" ;;
-      I) result="${result}i" ;;
-      J) result="${result}j" ;;
-      K) result="${result}k" ;;
-      L) result="${result}l" ;;
-      M) result="${result}m" ;;
-      N) result="${result}n" ;;
-      O) result="${result}o" ;;
-      P) result="${result}p" ;;
-      Q) result="${result}q" ;;
-      R) result="${result}r" ;;
-      S) result="${result}s" ;;
-      T) result="${result}t" ;;
-      U) result="${result}u" ;;
-      V) result="${result}v" ;;
-      W) result="${result}w" ;;
-      X) result="${result}x" ;;
-      Y) result="${result}y" ;;
-      Z) result="${result}z" ;;
-      *) result="${result}${char}" ;;
-    esac
-  done
-  printf '%s' "$result"
-}
-
 agent_tools_init() {
   local raw="${AGENT_TOOLS-}"
   local token known valid seen=' '
@@ -76,7 +36,7 @@ agent_tools_init() {
   fi
 
   for token in "${tokens[@]}"; do
-    token=$(agent_tools_lowercase "$token")
+    token=$(printf '%s' "$token" | tr '[:upper:]' '[:lower:]')
     valid=false
     for known in "${AGENT_TOOLS_KNOWN[@]}"; do
       if [[ "$token" == "$known" ]]; then
