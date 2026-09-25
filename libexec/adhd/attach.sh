@@ -5,19 +5,44 @@
 
 attach_usage() {
   cat <<'EOF'
-usage: adhd attach <dir> [--agents <list>]
+usage: adhd attach <dir | owner/repo | url> [--agents <list>] [--track]
 
-Copies the project-adhd Dev Container into <dir>/.devcontainer/project-adhd/
-and hides it from git. Rerun it to refresh an attached repository.
+Copies the project-adhd Dev Container into <dir>/.devcontainer/project-adhd/.
+By default it is hidden from git; --track makes it part of the repository.
+owner/repo and GitHub URLs are cloned with gh first. Rerun to refresh.
 EOF
 }
 
-# resolve_attach_target <arg>: prints the directory to attach.
+# resolve_attach_target <arg>: prints the directory to attach, cloning
+# owner/repo or a GitHub URL into the current directory first.
 resolve_attach_target() {
-  local arg=$1
+  local arg=$1 name
 
-  [[ -d "$arg" ]] || die "no such directory: $arg"
-  printf '%s\n' "$arg"
+  if [[ -d "$arg" ]]; then
+    printf '%s\n' "$arg"
+    return 0
+  fi
+  case "$arg" in
+    https://github.com/*|git@github.com:*)
+      name=${arg%/}
+      name=${name%.git}
+      name=${name##*/}
+      ;;
+    /*|./*|../*|'~'*)
+      die "no such directory: $arg"
+      ;;
+    *)
+      [[ "$arg" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] ||
+        die "not a directory, owner/repo, or GitHub URL: $arg"
+      name=${arg##*/}
+      ;;
+  esac
+  [[ -n "$name" && "$name" != . && "$name" != .. ]] || die "unable to derive a directory name from: $arg"
+  [[ ! -e "$name" ]] || die "$name already exists; to attach it, run: adhd attach $name"
+  require_gh
+  note "Cloning $arg" >&2
+  gh repo clone "$arg" "$name" >&2 || die "gh repo clone failed for $arg"
+  printf '%s\n' "$name"
 }
 
 # choose_agents <runtime> <agents> <agents_given>: sets ATTACH_AGENTS to the
@@ -123,6 +148,10 @@ write_ignore_rules() {
       mkdir -p "$common/info"
       write_block "$common/info/exclude"
       ;;
+    tracked)
+      printf '%s' "$ADHD_TRACKED_GITIGNORE" > "$runtime/.gitignore"
+      write_block "$root/.gitignore"
+      ;;
     *)
       die "unknown attach mode: $mode"
       ;;
@@ -167,6 +196,10 @@ cmd_attach() {
       --agents=*)
         agents=${1#--agents=}
         agents_given=1
+        shift
+        ;;
+      --track)
+        mode=tracked
         shift
         ;;
       -h|--help)

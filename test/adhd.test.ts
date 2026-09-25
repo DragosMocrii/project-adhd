@@ -11,6 +11,7 @@ import {
   repoRoot,
   run,
   withTemporaryParent,
+  writeStubs,
 } from "./helpers";
 
 const RUNTIME = ".devcontainer/project-adhd";
@@ -265,5 +266,139 @@ test("refresh removes a retired runtime file unless the user edited it", async (
     expect(existsSync(edited)).toBe(true);
     expect(result.stderr).toContain("kept .devcontainer/project-adhd/lib/retired-edited.ts");
     expect(await readFile(markerPath, "utf8")).not.toContain("retired");
+  });
+});
+
+const GH_STUB = `#!/bin/sh
+printf '%s\\n' "$*" >> "$GH_LOG"
+case "$1 $2" in
+  "auth status") [ -z "$GH_UNAUTHENTICATED" ] || exit 1 ;;
+  "repo clone")
+    git init -q "$4" &&
+      git -C "$4" -c user.email=t@example.invalid -c user.name=t commit -q --allow-empty -m init ;;
+  "repo create")
+    git init -q "$(basename "$3")" ;;
+esac
+`;
+
+async function ghEnv(parent: string, extra: Record<string, string> = {}): Promise<Record<string, string>> {
+  const stubBin = join(parent, "gh-bin");
+  await writeStubs(stubBin, { gh: GH_STUB });
+  return { PATH: `${stubBin}:${process.env.PATH ?? ""}`, GH_LOG: join(parent, "gh.log"), ...extra };
+}
+
+test("attach --track writes committed ignore rules and a tracked marker", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout } = await makeInstallation(parent);
+    const root = join(parent, "tracked");
+    await makeRepo(root);
+
+    const result = await adhd(checkout, ["attach", root, "--track", "--agents", "claude"], parent);
+
+    expect(result.exitCode).toBe(0);
+    expect(await readFile(join(root, RUNTIME, ".gitignore"), "utf8")).toBe(
+      "/.env\n/devcontainer.env\n*.adhd-new\n",
+    );
+    expect(await readFile(join(root, RUNTIME, ".adhd"), "utf8")).toStartWith("mode=tracked\n");
+    expect(await readFile(join(root, ".gitignore"), "utf8")).toBe(BLOCK);
+    const changes = await status(root);
+    expect(changes).toContain(`?? ${RUNTIME}/.adhd`);
+    expect(changes).toContain(`?? ${RUNTIME}/devcontainer.json`);
+    expect(changes).toContain("?? .gitignore");
+    expect(changes).not.toContain("devcontainer.env\n");
+    expect(changes).not.toContain(`${RUNTIME}/.env`);
+  });
+});
+
+test("this repository's runtime .gitignore is the tracked-mode rule set", async () => {
+  expect(await readFile(join(repoRoot, RUNTIME, ".gitignore"), "utf8")).toBe(
+    "/.env\n/devcontainer.env\n*.adhd-new\n",
+  );
+});
+
+test("attach refuses to switch modes without a detach", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout } = await makeInstallation(parent);
+    const root = join(parent, "switch");
+    await makeRepo(root);
+    expect((await adhd(checkout, ["attach", root, "--agents", "claude"], parent)).exitCode).toBe(0);
+
+    const result = await adhd(checkout, ["attach", root, "--track"], parent);
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("was attached untracked; run adhd detach first");
+  });
+});
+
+test("attach clones owner/repo and GitHub URLs with gh before attaching", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout } = await makeInstallation(parent);
+    const env = await ghEnv(parent);
+
+    for (const [spec, directory] of [
+      ["acme/widget", "widget"],
+      ["https://github.com/acme/gadget.git", "gadget"],
+      ["git@github.com:acme/gizmo.git", "gizmo"],
+    ] as const) {
+      const result = await adhd(checkout, ["attach", spec, "--agents", "claude"], parent, env);
+      expect(result.exitCode).toBe(0);
+      expect(existsSync(join(parent, directory, RUNTIME, ".adhd"))).toBe(true);
+    }
+    const log = await readFile(env.GH_LOG, "utf8");
+    expect(log).toContain("repo clone acme/widget widget");
+    expect(log).toContain("repo clone https://github.com/acme/gadget.git gadget");
+  });
+});
+
+test("attach refuses to clone over an existing directory or without gh auth", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout } = await makeInstallation(parent);
+    await mkdir(join(parent, "widget"));
+
+    const exists = await adhd(checkout, ["attach", "acme/widget"], parent, await ghEnv(parent));
+    expect(exists.exitCode).not.toBe(0);
+    expect(exists.stderr).toContain("widget already exists; to attach it, run: adhd attach widget");
+
+    const unauthenticated = await adhd(
+      checkout,
+      ["attach", "acme/other"],
+      parent,
+      await ghEnv(parent, { GH_UNAUTHENTICATED: "1" }),
+    );
+    expect(unauthenticated.exitCode).not.toBe(0);
+    expect(unauthenticated.stderr).toContain("gh auth login");
+    expect(existsSync(join(parent, "other"))).toBe(false);
+  });
+});
+
+test("attach reports a missing relative path instead of treating it as owner/repo", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout } = await makeInstallation(parent);
+    const env = await ghEnv(parent);
+
+    const result = await adhd(checkout, ["attach", "./missing/dir"], parent, env);
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("no such directory: ./missing/dir");
+    expect(existsSync(env.GH_LOG)).toBe(false);
+  });
+});
+
+test("new creates a private repository with gh and attaches it tracked", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout } = await makeInstallation(parent);
+    const env = await ghEnv(parent);
+
+    const privateRepo = await adhd(checkout, ["new", "acme/widget", "--agents", "claude"], parent, env);
+    const publicRepo = await adhd(checkout, ["new", "gadget", "--public"], parent, env);
+
+    expect(privateRepo.exitCode).toBe(0);
+    expect(publicRepo.exitCode).toBe(0);
+    const log = await readFile(env.GH_LOG, "utf8");
+    expect(log).toContain("repo create acme/widget --private --clone");
+    expect(log).toContain("repo create gadget --public --clone");
+    expect(await readFile(join(parent, "widget", RUNTIME, ".adhd"), "utf8")).toStartWith("mode=tracked\n");
+    expect(await readFile(join(parent, "widget", RUNTIME, "devcontainer.env"), "utf8")).toMatch(/^AGENT_TOOLS=claude$/m);
+    expect(privateRepo.stdout).toContain('git commit -m "chore: add project-adhd dev container"');
   });
 });
