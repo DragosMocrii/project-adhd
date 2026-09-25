@@ -104,6 +104,8 @@ export const STATE_DIRECTORIES = [
   ".bun/bin",
   ".bun/install",
   ".bun/install/global",
+  ".local/state",
+  ".local/state/project-adhd",
 ];
 
 export async function makeHome(parent: string): Promise<{ home: string; stubBin: string }> {

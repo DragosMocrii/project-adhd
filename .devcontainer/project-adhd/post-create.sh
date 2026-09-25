@@ -23,16 +23,22 @@ readonly -a STATE_ROOTS=(
   "$HOME/.codex"
   "$HOME/.gemini"
   "$HOME/.omp"
+  "$HOME/.local/state/project-adhd"
 )
 readonly -a INSTALLER_ROOTS=(
   "$HOME/.local"
   "$HOME/.local/bin"
   "$HOME/.local/share"
+  "$HOME/.local/state"
   "$HOME/.bun"
   "$HOME/.bun/bin"
   "$HOME/.bun/install"
   "$HOME/.bun/install/global"
 )
+
+readonly POST_CREATE_LOCK_FILE="$HOME/.local/state/project-adhd/post-create.lock"
+# Seconds to wait for another container's setup. Overridable for tests only.
+POST_CREATE_LOCK_TIMEOUT="${POST_CREATE_LOCK_TIMEOUT:-600}"
 
 die() {
   printf 'post-create: %s\n' "$*" >&2
@@ -354,6 +360,26 @@ install_archify() {
   done
 }
 
+# Agent state volumes are shared by every attached repository, so two
+# containers created at once must not install or enable plugins concurrently.
+with_shared_state_lock() {
+  exec 9>"$POST_CREATE_LOCK_FILE" || die "unable to open lock file: $POST_CREATE_LOCK_FILE"
+  if ! flock -n 9; then
+    echo '==> Waiting for another project-adhd setup to finish'
+    flock -w "$POST_CREATE_LOCK_TIMEOUT" 9 ||
+      die "timed out after ${POST_CREATE_LOCK_TIMEOUT}s waiting for $POST_CREATE_LOCK_FILE"
+  fi
+  "$@"
+  flock -u 9
+  exec 9>&-
+}
+
+configure_shared_state() {
+  configure_rtk
+  configure_superpowers
+  install_archify
+}
+
 main() {
   agent_tools_init
   printf '==> Selected agent tools: %s\n' "$(agent_tools_summary)"
@@ -361,9 +387,7 @@ main() {
   repair_installer_ownership
   configure_github_auth
   install_tools
-  configure_rtk
-  configure_superpowers
-  install_archify
+  with_shared_state_lock configure_shared_state
   echo '==> Post-create complete'
 }
 

@@ -12,6 +12,17 @@ import {
   writeStubs,
 } from "./helpers";
 
+async function holdLock(lockFile: string, seconds: number): Promise<ReturnType<typeof Bun.spawn>> {
+  const holder = Bun.spawn(["flock", lockFile, "sleep", String(seconds)]);
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const probe = Bun.spawn(["flock", "-n", lockFile, "true"]);
+    if ((await probe.exited) !== 0) return holder;
+    await Bun.sleep(40);
+  }
+  holder.kill();
+  throw new Error("lock holder never acquired the lock");
+}
+
 async function parseCodexMarketplace(document: unknown): Promise<CommandResult> {
   return run(
     [
@@ -249,5 +260,44 @@ test("skips OMP Superpowers when omp is selected without claude", async () => {
     );
     expect(await readFile(join(home, ".omp/agent/skills/archify/SKILL.md"), "utf8")).toBe("archify\n");
     expect(existsSync(join(home, ".claude/skills/archify"))).toBe(false);
+  });
+});
+
+test("waits for another setup's shared-state lock, then runs the step", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { home } = await makeHome(parent);
+    const lockFile = join(home, ".local/state/project-adhd/post-create.lock");
+    const holder = await holdLock(lockFile, 1);
+
+    const result = await run(
+      ["bash", "-c", 'source "$1"; with_shared_state_lock echo locked-step', "lock-test", postCreatePath],
+      home,
+      { HOME: home, POST_CREATE_LOCK_TIMEOUT: "20" },
+    );
+    await holder.exited;
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("==> Waiting for another project-adhd setup to finish");
+    expect(result.stdout).toContain("locked-step");
+  });
+});
+
+test("fails with the lock path when the shared-state lock is not released in time", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { home } = await makeHome(parent);
+    const lockFile = join(home, ".local/state/project-adhd/post-create.lock");
+    const holder = await holdLock(lockFile, 10);
+    try {
+      const result = await run(
+        ["bash", "-c", 'source "$1"; with_shared_state_lock echo never', "lock-test", postCreatePath],
+        home,
+        { HOME: home, POST_CREATE_LOCK_TIMEOUT: "1" },
+      );
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stdout).not.toContain("never");
+      expect(result.stderr).toContain(`timed out after 1s waiting for ${lockFile}`);
+    } finally {
+      holder.kill();
+    }
   });
 });
