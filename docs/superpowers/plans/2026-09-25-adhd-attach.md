@@ -91,7 +91,7 @@ Expected: `41 pass`, `0 fail`.
 - [ ] **Step 2: Create `.devcontainer/test/helpers.ts`**
 
 ```ts
-import { chmod, copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -160,7 +160,9 @@ export async function checked(
 export async function withTemporaryParent<T>(
   callback: (parent: string) => Promise<T>,
 ): Promise<T> {
-  const parent = await mkdtemp(join(tmpdir(), "project-adhd-test-"));
+  // Canonical, so macOS's /var -> /private/var symlink matches the pwd -P paths
+  // the scripts record.
+  const parent = await realpath(await mkdtemp(join(tmpdir(), "project-adhd-test-")));
   try {
     return await callback(parent);
   } finally {
@@ -181,6 +183,7 @@ export async function writeStubs(
 }
 
 // Every directory post-create.sh repairs; pre-creating them keeps tests off sudo.
+// Task 6 appends ".local/state" and ".local/state/project-adhd".
 export const STATE_DIRECTORIES = [
   ".claude",
   ".config/gh",
@@ -693,6 +696,20 @@ test("uses the project prefix for agent state when AGENT_STATE_SCOPE=project", a
   });
 });
 
+test("rejects a folder name that Compose's .env would mangle", async () => {
+  await withTemporaryParent(async (parent) => {
+    const root = join(parent, "price$tag");
+    await mkdir(root);
+    await prepareRepository(root);
+
+    const initializer = join(root, ".devcontainer", "project-adhd", "initialize.sh");
+    const result = await run([hostBash, initializer, root], root);
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("the folder name 'price$tag' contains");
+  });
+});
+
 test("rejects an unknown AGENT_STATE_SCOPE", async () => {
   await withTemporaryParent(async (parent) => {
     const root = join(parent, "bad-scope");
@@ -780,6 +797,13 @@ workspace_name=${workspace_name##*/}
 if [[ -z "$workspace_name" ]]; then
   die "unable to derive a workspace name from: $workspace_root"
 fi
+# WORKSPACE_NAME is written unquoted to Compose's .env, where these characters
+# would be interpolated or start a comment, breaking the mount path.
+case "$workspace_name" in
+  *'$'*|*'"'*|*"'"*|*'\'*|*' #'*)
+    die "the folder name '$workspace_name' contains \$, a quote, a backslash, or ' #'; rename the folder"
+    ;;
+esac
 
 if ! workspace_root=$(canonical_directory "$workspace_root"); then
   die "unable to resolve workspace root: $workspace_root"
@@ -1151,7 +1175,7 @@ git commit -m "feat: share agent volumes across repositories and mount at /works
 
 - [ ] **Step 1: Write the failing tests**
 
-In `test/helpers.ts`, append `".local/state/project-adhd"` to `STATE_DIRECTORIES`.
+In `test/helpers.ts`, append `".local/state"` and `".local/state/project-adhd"` to `STATE_DIRECTORIES`.
 
 Add to `test/post-create.test.ts` (importing `makeHome`, `postCreatePath`, `run` and `withTemporaryParent` from `./helpers`, and `join` from `node:path`):
 
@@ -1214,7 +1238,7 @@ Expected: the two new tests FAIL with `with_shared_state_lock: command not found
 
 - [ ] **Step 3: Implement the lock**
 
-In `post-create.sh`, add `"$HOME/.local/state/project-adhd"` as the last entry of `STATE_ROOTS`. After the `INSTALLER_ROOTS` declaration add:
+In `post-create.sh`, add `"$HOME/.local/state/project-adhd"` as the last entry of `STATE_ROOTS`, and add `"$HOME/.local/state"` to `INSTALLER_ROOTS` right after `"$HOME/.local/share"`. Docker creates the missing parents of a nested volume mount as root, just as the `rtk-data` mount does to `~/.local/share`. After the `INSTALLER_ROOTS` declaration add:
 
 ```bash
 readonly POST_CREATE_LOCK_FILE="$HOME/.local/state/project-adhd/post-create.lock"
@@ -2829,8 +2853,6 @@ test("running install.sh from a checkout links that checkout without cloning", a
   });
 });
 ```
-
-On macOS, `tmpdir()` is under a `/var` → `/private/var` symlink. If `readlink` comparisons fail there, compare against `await realpath(...)` of the expected path. `install.sh` stores canonical `pwd -P` paths for the checkout case.
 
 - [ ] **Step 3: Run to verify they fail**
 
