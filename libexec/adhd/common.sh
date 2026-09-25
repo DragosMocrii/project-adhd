@@ -144,3 +144,13 @@ selected_agents_csv() {
   local IFS=,
   printf '%s' "${AGENT_TOOLS_SELECTED[*]}"
 }
+
+# Ignore rules committed with a tracked attachment.
+ADHD_TRACKED_GITIGNORE=$'/.env\n/devcontainer.env\n*.adhd-new\n'
+
+require_gh() {
+  command -v gh >/dev/null 2>&1 ||
+    die 'gh is required for this command; install the GitHub CLI, then run: gh auth login'
+  gh auth status >/dev/null 2>&1 ||
+    die 'gh is not authenticated on this host; run: gh auth login'
+}
