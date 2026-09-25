@@ -184,3 +184,86 @@ test("attach refuses untracked mode once git tracks files in the runtime folder"
     expect(result.stderr).toContain("git already tracks files in .devcontainer/project-adhd; use --track");
   });
 });
+
+async function attached(parent: string, name: string): Promise<{ checkout: string; root: string }> {
+  const { checkout } = await makeInstallation(parent);
+  const root = join(parent, name);
+  await makeRepo(root);
+  const result = await adhd(checkout, ["attach", root, "--agents", "claude"], parent);
+  if (result.exitCode !== 0) throw new Error(result.stderr);
+  return { checkout, root };
+}
+
+test("rerunning attach with nothing changed is a no-op", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout, root } = await attached(parent, "idempotent");
+    const marker = await readFile(join(root, RUNTIME, ".adhd"), "utf8");
+
+    const result = await adhd(checkout, ["attach", root], parent);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).not.toContain("warning");
+    expect(await readFile(join(root, RUNTIME, ".adhd"), "utf8")).toBe(marker);
+    const listed = await checked(["find", join(root, RUNTIME), "-name", "*.adhd-new"], root);
+    expect(listed).toBe("");
+    const exclude = await readFile(join(root, ".git/info/exclude"), "utf8");
+    expect(exclude.split("# >>> project-adhd").length - 1).toBe(1);
+    expect(await status(root)).toBe("");
+  });
+});
+
+test("refresh updates unedited files, keeps edited ones, and preserves devcontainer.env", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout, root } = await attached(parent, "refresh");
+    const envFile = join(root, RUNTIME, "devcontainer.env");
+    await writeFile(envFile, "AGENT_TOOLS=claude\nCONTEXT7_API_KEY=mine\n");
+    const editedFile = join(root, RUNTIME, "devcontainer.json");
+    const edited = `${await readFile(editedFile, "utf8")}\n`;
+    await writeFile(editedFile, edited);
+    for (const file of ["devcontainer.json", "verify.sh"]) {
+      const source = join(checkout, RUNTIME, file);
+      await writeFile(source, `${await readFile(source, "utf8")}\n# newer\n`);
+    }
+
+    const result = await adhd(checkout, ["attach", root], parent);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toContain("kept your edited .devcontainer/project-adhd/devcontainer.json");
+    expect(await readFile(editedFile, "utf8")).toBe(edited);
+    expect(await readFile(`${editedFile}.adhd-new`, "utf8")).toBe(
+      await readFile(join(checkout, RUNTIME, "devcontainer.json"), "utf8"),
+    );
+    expect(await readFile(join(root, RUNTIME, "verify.sh"), "utf8")).toBe(
+      await readFile(join(checkout, RUNTIME, "verify.sh"), "utf8"),
+    );
+    expect(await readFile(envFile, "utf8")).toBe("AGENT_TOOLS=claude\nCONTEXT7_API_KEY=mine\n");
+
+    const second = await adhd(checkout, ["attach", root], parent);
+    expect(second.stderr).toContain("kept your edited .devcontainer/project-adhd/devcontainer.json");
+  });
+});
+
+test("refresh removes a retired runtime file unless the user edited it", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout, root } = await attached(parent, "retired");
+    const markerPath = join(root, RUNTIME, ".adhd");
+    const pristine = join(root, RUNTIME, "lib/retired.ts");
+    const edited = join(root, RUNTIME, "lib/retired-edited.ts");
+    await writeFile(pristine, "export {};\n");
+    await writeFile(edited, "export {};\n");
+    const pristineSha = (await checked(["shasum", "-a", "256", pristine], root)).split(" ")[0];
+    await writeFile(
+      markerPath,
+      `${await readFile(markerPath, "utf8")}sha:lib/retired.ts=${pristineSha}\nsha:lib/retired-edited.ts=${pristineSha}\n`,
+    );
+    await writeFile(edited, "export const mine = 1;\n");
+
+    const result = await adhd(checkout, ["attach", root], parent);
+
+    expect(result.exitCode).toBe(0);
+    expect(existsSync(pristine)).toBe(false);
+    expect(existsSync(edited)).toBe(true);
+    expect(result.stderr).toContain("kept .devcontainer/project-adhd/lib/retired-edited.ts");
+    expect(await readFile(markerPath, "utf8")).not.toContain("retired");
+  });
+});
