@@ -15,7 +15,8 @@ runtime it attaches to other Git repositories.
   the `*.ts` modules parse agent-CLI plugin JSON.
 - `test/` — the contract suite, split by where code runs: host
   (`initialize`, `adhd`, `install`, `agent-tools`, `portability`) and
-  container (`post-create`, `verify`), plus static `config` checks.
+  container (`post-create`, `verify`), plus static `config` checks and
+  `parsers` (unit tests for the plugin-JSON modules).
 - `package.json`, `bun.lock`, `tsconfig.json` — the suite's own tooling.
 
 ## Conventions

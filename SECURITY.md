@@ -33,7 +33,7 @@ it first, clone the repository and run `./install.sh` from the checkout.
 ## Installers are unpinned by design
 
 None of the above are version-pinned. Agent CLIs ship frequently, and a pinned
-template goes stale faster than it gains reproducibility. The consequence is
+project-adhd goes stale faster than it gains reproducibility. The consequence is
 explicit: **container rebuilds are not byte-reproducible**, and you are
 trusting each vendor's installer at the moment you build. If your threat model
 does not allow that, fork project-adhd and pin the installers yourself.
@@ -73,7 +73,8 @@ Deleting `.devcontainer/project-adhd/.env` or `devcontainer.env`, or running
 `adhd detach`, does **not** remove any volume. Remove them deliberately:
 
 ```bash
-docker volume ls --filter name=project-adhd
+docker volume ls --filter name=project-adhd-shared   # shared agent state
+docker volume ls --filter name=<prefix>              # per-repository rtk-data, and project-scope agent state
 docker volume rm project-adhd-shared-claude project-adhd-shared-gh …
 ```
 
@@ -91,5 +92,5 @@ suspect a changed JSON shape first and open an issue.
 
 ## Reporting a vulnerability
 
-Open a GitHub issue for anything affecting the template's own scripts. For
+Open a GitHub issue for anything affecting project-adhd's own scripts. For
 vulnerabilities in the installed agent CLIs, report to those vendors directly.

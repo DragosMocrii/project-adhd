@@ -138,8 +138,9 @@ Container Feature for a toolchain to `devcontainer.json`:
 "ghcr.io/devcontainers/features/go:1": {}
 ```
 
-`attach` never overwrites a file you edited. It writes the new version beside
-it as `<file>.adhd-new` and warns, so you can merge by hand.
+`attach` never overwrites a file you edited. When a new version of it ships,
+it writes that version beside it as `<file>.adhd-new` and warns once, so you
+can merge by hand; later refreshes stay quiet until another version ships.
 
 ## Detaching
 

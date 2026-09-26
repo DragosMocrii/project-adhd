@@ -506,7 +506,10 @@ test("detach restores an untracked attachment exactly", async () => {
     expect(existsSync(join(root, ".devcontainer"))).toBe(false);
     expect(await readExclude()).toBe(excludeBefore);
     expect(await status(root)).toBe(statusBefore);
-    expect(result.stdout).toContain("docker volume ls");
+    expect(result.stdout).toContain(
+      `Detached project-adhd from ${root} (removed .devcontainer/project-adhd/, including devcontainer.env and any local edits)`,
+    );
+    expect(result.stdout).toContain("docker volume ls --filter name=project-adhd-shared");
   });
 });
 

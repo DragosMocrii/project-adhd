@@ -5,6 +5,8 @@
 #
 # Run from a project-adhd checkout, it links that checkout instead of cloning.
 # Host code: must stay bash 3.2-compatible with BSD or GNU userland.
+# Everything runs from main, called on the last line, so a truncated download
+# does nothing.
 set -euo pipefail
 
 die() {
@@ -16,57 +18,71 @@ warn() {
   printf 'install.sh: warning: %s\n' "$*" >&2
 }
 
-ADHD_REPO=${ADHD_REPO:-https://github.com/DragosMocrii/project-adhd.git}
-ADHD_REF=${ADHD_REF:-main}
-BIN_DIR="$HOME/.local/bin"
+# check_link <link> <target>: dies when <link> exists and is not a symlink to <target>.
+check_link() {
+  local link=$1 target=$2
 
-command -v git >/dev/null 2>&1 || die 'git is required'
-
-self_dir=
-if [[ -n "${BASH_SOURCE[0]-}" && -f "${BASH_SOURCE[0]}" ]]; then
-  self_dir=$(cd -P -- "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
-fi
-
-if [[ -n "$self_dir" && -f "$self_dir/bin/adhd" && -e "$self_dir/.git" ]]; then
-  ADHD_HOME=$self_dir
-  echo "==> Using the checkout at $ADHD_HOME"
-else
-  ADHD_HOME=${ADHD_HOME:-$HOME/.local/share/project-adhd}
-  if [[ -e "$ADHD_HOME/.git" ]]; then
-    echo "==> Updating $ADHD_HOME"
-    git -C "$ADHD_HOME" pull --ff-only || die "unable to fast-forward $ADHD_HOME"
-  elif [[ -e "$ADHD_HOME" ]]; then
-    die "$ADHD_HOME exists but is not a project-adhd checkout"
-  else
-    echo "==> Cloning project-adhd into $ADHD_HOME"
-    mkdir -p "$(dirname "$ADHD_HOME")"
-    git clone --quiet --branch "$ADHD_REF" "$ADHD_REPO" "$ADHD_HOME" ||
-      die "unable to clone $ADHD_REPO"
+  if [[ -L "$link" ]]; then
+    [[ "$(readlink "$link")" == "$target" ]] ||
+      die "$link already points to $(readlink "$link"); remove it and rerun"
+  elif [[ -e "$link" ]]; then
+    die "$link already exists and is not a symlink; remove it and rerun"
   fi
-fi
+}
 
-target="$ADHD_HOME/bin/adhd"
-link="$BIN_DIR/adhd"
-[[ -f "$target" ]] || die "$target is missing; the checkout is incomplete"
-chmod +x "$target"
-mkdir -p "$BIN_DIR"
-if [[ -L "$link" ]]; then
-  [[ "$(readlink "$link")" == "$target" ]] ||
-    die "$link already points to $(readlink "$link"); remove it and rerun"
-elif [[ -e "$link" ]]; then
-  die "$link already exists and is not a symlink; remove it and rerun"
-else
-  ln -s "$target" "$link"
-fi
-echo "==> adhd is installed at $link"
+main() {
+  local repo=${ADHD_REPO:-https://github.com/DragosMocrii/project-adhd.git}
+  local ref=${ADHD_REF:-main}
+  local bin_dir="$HOME/.local/bin"
+  local self_dir='' from_checkout=0 adhd_home target link
 
-case ":${PATH-}:" in
-  *":$BIN_DIR:"*) ;;
-  *)
-    warn "$BIN_DIR is not on PATH. Add this line to ~/.zprofile (zsh) or ~/.bashrc (bash):"
-    # shellcheck disable=SC2016  # the line is printed for the user, unexpanded
-    printf '  export PATH="$HOME/.local/bin:$PATH"\n' >&2
-    ;;
-esac
-command -v docker >/dev/null 2>&1 || warn 'docker is not installed; Dev Containers need it'
-command -v gh >/dev/null 2>&1 || warn 'gh is not installed; adhd attach owner/repo and adhd new need it'
+  command -v git >/dev/null 2>&1 || die 'git is required'
+
+  if [[ -n "${BASH_SOURCE[0]-}" && -f "${BASH_SOURCE[0]}" ]]; then
+    self_dir=$(cd -P -- "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+  fi
+  if [[ -n "$self_dir" && -f "$self_dir/bin/adhd" && -e "$self_dir/.git" ]]; then
+    adhd_home=$self_dir
+    from_checkout=1
+  else
+    adhd_home=${ADHD_HOME:-$HOME/.local/share/project-adhd}
+  fi
+  target="$adhd_home/bin/adhd"
+  link="$bin_dir/adhd"
+  check_link "$link" "$target"
+
+  if (( from_checkout )); then
+    echo "==> Using the checkout at $adhd_home"
+  elif [[ -e "$adhd_home/.git" && -f "$adhd_home/bin/adhd" ]]; then
+    echo "==> Updating $adhd_home"
+    git -C "$adhd_home" pull --ff-only || die "unable to fast-forward $adhd_home"
+  elif [[ -e "$adhd_home" ]]; then
+    die "$adhd_home exists but is not a project-adhd checkout"
+  else
+    echo "==> Cloning project-adhd into $adhd_home"
+    mkdir -p "$(dirname "$adhd_home")"
+    git clone --quiet --branch "$ref" "$repo" "$adhd_home" ||
+      die "unable to clone $repo"
+  fi
+
+  [[ -f "$target" ]] || die "$target is missing; the checkout is incomplete"
+  chmod +x "$target"
+  mkdir -p "$bin_dir"
+  if [[ ! -L "$link" ]]; then
+    ln -s "$target" "$link"
+  fi
+  echo "==> adhd is installed at $link"
+
+  case ":${PATH-}:" in
+    *":$bin_dir:"*) ;;
+    *)
+      warn "$bin_dir is not on PATH. Add this line to ~/.zprofile (zsh) or ~/.bashrc (bash):"
+      # shellcheck disable=SC2016  # the line is printed for the user, unexpanded
+      printf '  export PATH="$HOME/.local/bin:$PATH"\n' >&2
+      ;;
+  esac
+  command -v docker >/dev/null 2>&1 || warn 'docker is not installed; Dev Containers need it'
+  command -v gh >/dev/null 2>&1 || warn 'gh is not installed; adhd attach owner/repo and adhd new need it'
+}
+
+main "$@"

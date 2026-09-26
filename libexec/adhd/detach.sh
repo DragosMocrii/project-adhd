@@ -76,10 +76,10 @@ cmd_detach() {
       ;;
   esac
 
-  note "Detached project-adhd from $root (its devcontainer.env was removed)"
+  note "Detached project-adhd from $root (removed $ADHD_RUNTIME_REL/, including devcontainer.env and any local edits)"
   if [[ -n "$prefix" ]]; then
     printf "Docker volumes were kept. List this repository's with: docker volume ls --filter name=%s\n" "$prefix"
   else
-    printf 'Docker volumes were kept. List them with: docker volume ls --filter name=project-adhd\n'
+    printf 'Docker volumes were kept. List the shared ones with: docker volume ls --filter name=project-adhd-shared\n'
   fi
 }
