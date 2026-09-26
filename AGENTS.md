@@ -40,7 +40,7 @@ selected and authenticated.
 ```bash
 bun test
 bun run typecheck
-shellcheck .devcontainer/project-adhd/*.sh .devcontainer/project-adhd/lib/agent-tools.sh
+shellcheck install.sh bin/adhd libexec/adhd/*.sh .devcontainer/project-adhd/*.sh .devcontainer/project-adhd/lib/agent-tools.sh
 ```
 
 Note: `shellcheck` is not preinstalled in the container image. CI runs it on
