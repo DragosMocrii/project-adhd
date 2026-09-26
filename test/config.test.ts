@@ -148,21 +148,17 @@ test("documents AGENT_TOOLS in the tracked environment example", async () => {
   expect(example).toContain("AGENT_STATE_SCOPE");
 });
 
-test("documents a create command that works for someone who is not the repository owner", async () => {
+test("documents installing adhd and attaching it, not the retired template flow", async () => {
   const readme = await readFile(join(repoRoot, "README.md"), "utf8");
 
-  expect(readme).toContain("--template DragosMocrii/project-adhd");
-  expect(readme).not.toContain("gh api user --jq .login");
-  expect(readme).not.toContain('"$OWNER/project-adhd"');
+  expect(readme).toContain("install.sh | bash");
+  expect(readme).toContain("adhd attach");
+  expect(readme).toContain("adhd new");
+  expect(readme).toContain("adhd detach");
   expect(readme).toContain("AGENT_TOOLS");
+  expect(readme).toContain("AGENT_STATE_SCOPE");
   expect(readme).toContain("SECURITY.md");
-
-  const createCommandLine = readme
-    .split("\n")
-    .find((line) => line.includes("gh repo create"));
-  expect(createCommandLine).toBeDefined();
-  expect(createCommandLine).toContain("--template DragosMocrii/project-adhd");
-  expect(createCommandLine).not.toContain("$OWNER");
+  expect(readme).not.toContain("--template");
 });
 
 test("ships agent guidance that Claude and Codex both resolve", async () => {
@@ -170,6 +166,7 @@ test("ships agent guidance that Claude and Codex both resolve", async () => {
   const claude = await readFile(join(repoRoot, "CLAUDE.md"), "utf8");
 
   expect(agents).toContain("AGENT_TOOLS");
-  expect(agents).toContain(".devcontainer/");
+  expect(agents).toContain(".devcontainer/project-adhd/");
+  expect(agents).toContain("bash 3.2");
   expect(claude.trim()).toBe("@AGENTS.md");
 });
