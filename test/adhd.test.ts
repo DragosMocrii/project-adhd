@@ -240,7 +240,55 @@ test("refresh updates unedited files, keeps edited ones, and preserves devcontai
     expect(await readFile(envFile, "utf8")).toBe("AGENT_TOOLS=claude\nCONTEXT7_API_KEY=mine\n");
 
     const second = await adhd(checkout, ["attach", root], parent);
-    expect(second.stderr).toContain("kept your edited .devcontainer/project-adhd/devcontainer.json");
+    expect(second.exitCode).toBe(0);
+    expect(second.stderr).not.toContain("kept your edited");
+    expect(await readFile(editedFile, "utf8")).toBe(edited);
+  });
+});
+
+test("refresh leaves a user-edited file alone when nothing new was shipped", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout, root } = await attached(parent, "edited-quiet");
+    const editedFile = join(root, RUNTIME, "devcontainer.json");
+    const edited = `${await readFile(editedFile, "utf8")}\n// mine\n`;
+    await writeFile(editedFile, edited);
+
+    const result = await adhd(checkout, ["attach", root], parent);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).not.toContain("warning");
+    expect(await readFile(editedFile, "utf8")).toBe(edited);
+    expect(existsSync(`${editedFile}.adhd-new`)).toBe(false);
+  });
+});
+
+test("refresh accepts an adopted .adhd-new and later updates that file in place", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout, root } = await attached(parent, "adopted");
+    const editedFile = join(root, RUNTIME, "devcontainer.json");
+    const source = join(checkout, RUNTIME, "devcontainer.json");
+    await writeFile(editedFile, `${await readFile(editedFile, "utf8")}\n// mine\n`);
+    await writeFile(source, `${await readFile(source, "utf8")}\n// newer\n`);
+    const offered = await adhd(checkout, ["attach", root], parent);
+    expect(offered.stderr).toContain("kept your edited .devcontainer/project-adhd/devcontainer.json");
+    await checked(["mv", `${editedFile}.adhd-new`, editedFile], root);
+    const listRuntime = () => checked(["find", join(root, RUNTIME), "-type", "f"], root);
+    const filesBefore = await listRuntime();
+
+    const accepted = await adhd(checkout, ["attach", root], parent);
+
+    expect(accepted.exitCode).toBe(0);
+    expect(accepted.stderr).not.toContain("warning");
+    expect(await listRuntime()).toBe(filesBefore);
+    expect(await readFile(editedFile, "utf8")).toBe(await readFile(source, "utf8"));
+
+    await writeFile(source, `${await readFile(source, "utf8")}// newest\n`);
+    const updated = await adhd(checkout, ["attach", root], parent);
+
+    expect(updated.exitCode).toBe(0);
+    expect(updated.stderr).not.toContain("kept your edited");
+    expect(await readFile(editedFile, "utf8")).toBe(await readFile(source, "utf8"));
+    expect(existsSync(`${editedFile}.adhd-new`)).toBe(false);
   });
 });
 
