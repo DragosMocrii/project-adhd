@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, readlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readlink, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { hostBash, makeInstallation, repoRoot, run, withTemporaryParent } from "./helpers";
+import { hostBash, makeInstallation, makeRepo, repoRoot, run, withTemporaryParent } from "./helpers";
 
 async function pipedInstall(home: string, origin: string, path = process.env.PATH ?? "") {
   const script = await readFile(join(repoRoot, "install.sh"), "utf8");
@@ -67,5 +67,36 @@ test("running install.sh from a checkout links that checkout without cloning", a
     expect(result.exitCode).toBe(0);
     expect(await readlink(join(home, ".local/bin/adhd"))).toBe(join(checkout, "bin/adhd"));
     expect(existsSync(join(home, ".local/share/project-adhd"))).toBe(false);
+  });
+});
+
+test("install refuses an adhd link that points elsewhere, before cloning", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { origin } = await makeInstallation(parent);
+    const home = join(parent, "home");
+    await mkdir(join(home, ".local/bin"), { recursive: true });
+    await symlink("/elsewhere/adhd", join(home, ".local/bin/adhd"));
+
+    const result = await pipedInstall(home, origin);
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("already points to /elsewhere/adhd");
+    expect(await readlink(join(home, ".local/bin/adhd"))).toBe("/elsewhere/adhd");
+    expect(existsSync(join(home, ".local/share/project-adhd"))).toBe(false);
+  });
+});
+
+test("install refuses to pull a Git checkout that is not project-adhd", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { origin } = await makeInstallation(parent);
+    const home = join(parent, "home");
+    const foreign = join(home, ".local/share/project-adhd");
+    await makeRepo(foreign);
+
+    const result = await pipedInstall(home, origin);
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("exists but is not a project-adhd checkout");
+    expect(existsSync(join(foreign, "bin/adhd"))).toBe(false);
   });
 });

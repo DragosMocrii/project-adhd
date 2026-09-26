@@ -245,6 +245,21 @@ test("rejects a folder name that Compose's .env would mangle", async () => {
   });
 });
 
+test("rejects a folder name with a colon, which breaks the Compose bind mount", async () => {
+  await withTemporaryParent(async (parent) => {
+    const root = join(parent, "time:stamp");
+    await mkdir(root);
+    await prepareRepository(root);
+
+    const initializer = join(root, ".devcontainer", "project-adhd", "initialize.sh");
+    const result = await run([hostBash, initializer, root], root);
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("the folder name 'time:stamp' contains");
+    expect(result.stderr).toContain("a colon");
+  });
+});
+
 test("rejects an unknown AGENT_STATE_SCOPE", async () => {
   await withTemporaryParent(async (parent) => {
     const root = join(parent, "bad-scope");
