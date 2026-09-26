@@ -76,25 +76,35 @@ in_manifest() {
 }
 
 # copy_runtime <runtime> <marker>: copies every runtime file, printing one sha
-# line each. A file whose checksum differs from the marker's (the user edited
-# it) is kept; the new version is written beside it as <file>.adhd-new.
+# line each, conffile-style. A file the user edited since the last offer is
+# kept; when a new version ships it is written beside it as <file>.adhd-new
+# and recorded, so the same version is offered only once.
 copy_runtime() {
-  local runtime=$1 marker=$2 file source destination recorded
+  local runtime=$1 marker=$2 file source destination recorded='' shipped current
 
   for file in "${ADHD_RUNTIME_FILES[@]}"; do
     source="$ADHD_RUNTIME_SOURCE/$file"
     destination="$runtime/$file"
     [[ -f "$source" ]] || die "the installation is incomplete (missing $source); run: adhd update"
     mkdir -p "$(dirname "$destination")"
-    if [[ -f "$destination" ]] && recorded=$(marker_get "$marker" "sha:$file") &&
-      [[ "$(file_sha256 "$destination")" != "$recorded" ]]; then
-      cp -p "$source" "$destination.adhd-new"
-      warn "kept your edited $ADHD_RUNTIME_REL/$file; the new version is $file.adhd-new"
-      printf 'sha:%s=%s\n' "$file" "$recorded"
+    shipped=$(file_sha256 "$source")
+    if [[ ! -f "$destination" ]]; then
+      cp -p "$source" "$destination"
+      printf 'sha:%s=%s\n' "$file" "$shipped"
       continue
     fi
-    cp -p "$source" "$destination"
-    printf 'sha:%s=%s\n' "$file" "$(file_sha256 "$destination")"
+    current=$(file_sha256 "$destination")
+    recorded=$(marker_get "$marker" "sha:$file") || recorded=''
+    if [[ "$current" == "$shipped" ]]; then
+      rm -f -- "$destination.adhd-new"
+    elif [[ "$current" == "$recorded" ]]; then
+      cp -p "$source" "$destination"
+    elif [[ "$shipped" != "$recorded" ]]; then
+      cp -p "$source" "$destination.adhd-new"
+      warn "kept your edited $ADHD_RUNTIME_REL/$file; the new version is $file.adhd-new"
+    fi
+    # Otherwise the user edited it and nothing new shipped: keep it silently.
+    printf 'sha:%s=%s\n' "$file" "$shipped"
   done
 }
 
