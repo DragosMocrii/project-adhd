@@ -175,6 +175,16 @@ done
 
 `<old-prefix>-rtk-data` keeps its name and needs no copy.
 
+**Existing checkouts of this repository** (made before the runtime moved to
+`.devcontainer/project-adhd/`): move `.devcontainer/devcontainer.env` to
+`.devcontainer/project-adhd/devcontainer.env`, which keeps your
+`AGENT_TOOLS` and keys; delete the old `.devcontainer/.env`; then rebuild the
+container. The old Compose project, `<old-prefix>-devcontainer`, is left
+behind — `docker compose -p <old-prefix>-devcontainer down` removes it, and
+leaves its volumes untouched. Agent histories recorded under `/workspace`
+will not appear under `/workspaces/<name>`, and worktrees created inside the
+old container need `git worktree repair`.
+
 ## Security
 
 `post-create.sh` fetches and executes vendor installers, the installer is

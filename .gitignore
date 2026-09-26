@@ -20,6 +20,10 @@ report.*.json
 .env.*
 !.env.example
 
+# Legacy (pre-adhd) local files; keep until every checkout has migrated
+/.devcontainer/.env
+/.devcontainer/devcontainer.env
+
 # Caches
 .eslintcache
 .cache/
