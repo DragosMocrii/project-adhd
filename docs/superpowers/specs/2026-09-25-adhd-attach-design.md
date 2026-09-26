@@ -424,9 +424,14 @@ Each of these either gets confirmed, or changes the design before merge:
 1. The Dev Containers extension discovers `.devcontainer/project-adhd/devcontainer.json`
    when no root config exists, and offers a choice when upstream ships
    `.devcontainer/devcontainer.json` or `.devcontainer.json`.
+   Pending — host verification (plan Task 14, Steps 2–5); cannot run inside the Dev Container.
 2. `${localWorkspaceFolderBasename}` is substituted in `workspaceFolder` for
    Compose-based configurations.
+   Pending — host verification (plan Task 14, Steps 2–5); cannot run inside the Dev Container.
 3. Compose's `.env` parsing keeps a `WORKSPACE_NAME` containing spaces intact.
+   Verified 2026-09-26: test/config.test.ts renders /workspaces/My Project from .env beside the compose file.
 4. RTK's installer supports linux/arm64.
+   Verified 2026-09-26: v0.50.0 release contains rtk-aarch64-unknown-linux-gnu.tar.gz asset.
 5. `updateRemoteUserUID` applies to this Compose configuration on a Linux host
    with a UID other than 1000.
+   Pending — host verification (plan Task 14, Steps 2–5); cannot run inside the Dev Container.
