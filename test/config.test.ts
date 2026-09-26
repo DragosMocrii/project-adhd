@@ -37,6 +37,13 @@ test("ignores local state files inside the runtime folder only", async () => {
       expect(result.exitCode).toBe(0);
     }
 
+    // Legacy (pre-adhd) local files in existing checkouts of this repository.
+    for (const path of [".devcontainer/.env", ".devcontainer/devcontainer.env"]) {
+      const details = await run(["git", "check-ignore", "--no-index", "--verbose", "--", path], root);
+      expect(details.exitCode).toBe(0);
+      expect(details.stdout).toStartWith(".gitignore:");
+    }
+
     const nested = await run(
       ["git", "check-ignore", "--no-index", "--quiet", "--", "nested/.devcontainer/project-adhd/devcontainer.env"],
       root,
