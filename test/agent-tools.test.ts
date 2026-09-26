@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
+import { repoRoot, runtimeDir, hostBash } from "./helpers";
 
-const scaffoldRoot = resolve(import.meta.dir, "..");
-const libraryPath = join(scaffoldRoot, "lib", "agent-tools.sh");
+const libraryPath = join(runtimeDir, "lib", "agent-tools.sh");
 
 type ShellResult = { exitCode: number; stdout: string; stderr: string };
 
@@ -16,8 +16,8 @@ async function selection(agentTools?: string): Promise<ShellResult> {
   else env.AGENT_TOOLS = agentTools;
 
   const child = Bun.spawn(
-    ["bash", "-c", 'source "$1"; agent_tools_init; agent_tools_summary', "agent-tools-test", libraryPath],
-    { cwd: scaffoldRoot, env, stdout: "pipe", stderr: "pipe" },
+    [hostBash, "-c", 'source "$1"; agent_tools_init; agent_tools_summary', "agent-tools-test", libraryPath],
+    { cwd: repoRoot, env, stdout: "pipe", stderr: "pipe" },
   );
   const [stdout, stderr] = await Promise.all([
     new Response(child.stdout).text(),
@@ -35,8 +35,8 @@ async function predicate(agentTools: string, tool: string): Promise<number> {
   env.AGENT_TOOLS = agentTools;
 
   const child = Bun.spawn(
-    ["bash", "-c", 'source "$1"; agent_tools_init; agent_tool_selected "$2"', "agent-tools-test", libraryPath, tool],
-    { cwd: scaffoldRoot, env, stdout: "pipe", stderr: "pipe" },
+    [hostBash, "-c", 'source "$1"; agent_tools_init; agent_tool_selected "$2"', "agent-tools-test", libraryPath, tool],
+    { cwd: repoRoot, env, stdout: "pipe", stderr: "pipe" },
   );
   return child.exited;
 }

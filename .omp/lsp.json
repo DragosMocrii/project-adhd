@@ -3,7 +3,7 @@
     "typescript-native": {
       "command": "bun",
       "args": [
-        ".devcontainer/node_modules/typescript/lib/tsc.js",
+        "node_modules/typescript/lib/tsc.js",
         "--lsp",
         "--stdio"
       ],
@@ -18,8 +18,6 @@
         ".cjs"
       ],
       "rootMarkers": [
-        ".devcontainer/package.json",
-        ".devcontainer/tsconfig.json",
         "package.json",
         "tsconfig.json",
         "jsconfig.json"

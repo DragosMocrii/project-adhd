@@ -5,6 +5,7 @@
 # Unset or empty selects every known tool, so an unconfigured project
 # behaves exactly as it did before selection existed.
 #
+# Sourced on the host by adhd as well, so it must stay bash 3.2-compatible.
 # This file is sourced, never executed.
 
 AGENT_TOOLS_KNOWN=(claude codex gemini omp)
@@ -23,9 +24,8 @@ agent_tools_join() {
 
 agent_tools_init() {
   local raw="${AGENT_TOOLS-}"
-  local token known valid
+  local token known valid seen=' '
   local -a tokens=() normalized=()
-  local -A seen=()
 
   raw=${raw//,/ }
   read -r -a tokens <<< "$raw"
@@ -36,7 +36,7 @@ agent_tools_init() {
   fi
 
   for token in "${tokens[@]}"; do
-    token="${token,,}"
+    token=$(printf '%s' "$token" | tr '[:upper:]' '[:lower:]')
     valid=false
     for known in "${AGENT_TOOLS_KNOWN[@]}"; do
       if [[ "$token" == "$known" ]]; then
@@ -47,11 +47,11 @@ agent_tools_init() {
     if [[ "$valid" != true ]]; then
       agent_tools_die "unknown tool '$token' (valid: $(agent_tools_join "${AGENT_TOOLS_KNOWN[@]}"))"
     fi
-    seen["$token"]=1
+    seen="$seen$token "
   done
 
   for known in "${AGENT_TOOLS_KNOWN[@]}"; do
-    if [[ -n "${seen[$known]-}" ]]; then
+    if [[ "$seen" == *" $known "* ]]; then
       normalized+=("$known")
     fi
   done
