@@ -19,6 +19,8 @@ report.*.json
 .env
 .env.*
 !.env.example
+
+# Legacy (pre-adhd) local files; keep until every checkout has migrated
 /.devcontainer/.env
 /.devcontainer/devcontainer.env
 
@@ -27,11 +29,10 @@ report.*.json
 .cache/
 *.tsbuildinfo
 
-# Project-local worktrees and Superpowers state
+# Project-local worktrees and Superpowers state (specs and plans under docs/superpowers/ are tracked)
 /.worktrees/
 /.claude/worktrees/
 /.superpowers/
-/docs/superpowers/
 
 # IDE state
 .idea/

@@ -2,7 +2,7 @@
   "name": "project-adhd",
   "dockerComposeFile": "docker-compose.yml",
   "service": "workspace",
-  "workspaceFolder": "/workspace",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
   "features": {
     "ghcr.io/devcontainers-extra/features/bun:1": {
       "version": "1.4.0"
@@ -25,9 +25,8 @@
       ]
     }
   },
-  "initializeCommand": "bash \"${localWorkspaceFolder}/.devcontainer/initialize.sh\" \"${localWorkspaceFolder}\"",
-  "updateContentCommand": "cd .devcontainer && bun install --frozen-lockfile",
-  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "initializeCommand": "bash \"${localWorkspaceFolder}/.devcontainer/project-adhd/initialize.sh\" \"${localWorkspaceFolder}\"",
+  "postCreateCommand": "bash .devcontainer/project-adhd/post-create.sh",
   "remoteUser": "vscode",
   "containerEnv": {
     "CLAUDE_CONFIG_DIR": "/home/vscode/.claude",

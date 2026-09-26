@@ -1,170 +1,207 @@
 # project-adhd
 
-A GitHub template for an agentic development environment: a pinned Dev
-Container that installs your choice of agent CLIs, wires them to the RTK
-token-optimizing proxy and the Superpowers plugin, and keeps every credential
-and plugin in per-project Docker volumes that survive rebuilds.
+An agentic Dev Container you attach to any Git repository. It installs your
+choice of agent CLIs, wires them to the RTK token-optimizing proxy and the
+Superpowers plugin, and keeps logins and plugins in Docker volumes shared by
+every repository you attach it to — so you authenticate once, not once per
+project.
 
 **What you get**
 
+- `adhd`, a small host CLI: `attach`, `detach`, `update`, `new`.
 - A digest-pinned Dev Container with Bun, Node, `python3`, and the GitHub CLI.
 - Your choice of Claude Code, Codex, Gemini CLI, and OMP — see `AGENT_TOOLS`.
-- RTK configured as a hook for each selected agent, cutting bash output tokens.
+- RTK configured as a hook for each selected agent.
 - The Superpowers plugin and the Archify skill installed per agent.
-- Seven named state volumes, scoped per project and shared across worktrees.
-- A contract test suite and `verify.sh` that prove the environment is correct.
+- One container per repository (and per worktree); several can run at once.
+- Nothing committed to the repository you attach to.
 
-This template provisions an *environment*. It ships no application scaffold —
-your project's own `package.json`, `src/`, and tests stay entirely yours.
+## Install
 
-## Create a project
-
-Your host machine needs:
-
-- Docker
-- VS Code with the Dev Containers extension
-- an authenticated GitHub CLI (`gh auth login`)
-- `bash` and `git`
-
-These run on the host itself, not inside the container — the Dev Containers extension's `initializeCommand` invokes `bash .devcontainer/initialize.sh` on the host before the container is built.
+Your host needs Docker, VS Code with the Dev Containers extension, `git`,
+`bash`, and the GitHub CLI (`gh auth login`) for cloning and creating
+repositories. Linux and macOS are supported.
 
 ```bash
-gh repo create my-project --private --template DragosMocrii/project-adhd --clone
-cd my-project
+curl -fsSL https://raw.githubusercontent.com/DragosMocrii/project-adhd/main/install.sh | bash
 ```
 
-## First-run setup
+This clones project-adhd into `~/.local/share/project-adhd` and links
+`~/.local/bin/adhd`. If `~/.local/bin` is not on your `PATH`, the installer
+prints the line to add. Running it again updates the installation. From a
+checkout of this repository, `./install.sh` links that checkout instead.
 
-1. **Choose your tools, before the first build.** Copy
-   `.devcontainer/devcontainer.env.example` to `.devcontainer/devcontainer.env`
-   and set `AGENT_TOOLS` (see below). Leaving it unset selects all four —
-   do this now if you only have credentials for some of the agents.
-2. **Open the clone in VS Code (`code .`) and run
-   Dev Containers: Reopen in Container.** The first creation installs Bun
-   tooling, the selected agent CLIs, RTK, and Archify. No agent is
-   authenticated yet, so post-create deliberately defers Superpowers setup,
-   prints what to run, and exits successfully.
-3. **Authenticate.** Start `gemini` once and complete its sign-in flow if you
-   selected it, then run the logins for the tools you selected:
+## Attach to a repository
 
-   ```bash
-   gh auth login        # always
-   claude auth login    # if claude is in AGENT_TOOLS
-   codex login          # if codex is in AGENT_TOOLS
-   ```
+```bash
+adhd attach facebook/react --agents claude,codex   # clones with gh, then attaches
+adhd attach ~/src/existing-clone                   # or attach a clone you already have
+```
 
-4. **Rerun post-create.** This installs or enables Superpowers through each
-   CLI's native mechanism, selecting the exposed reserved Codex catalog:
-   `openai-curated` for ChatGPT authentication or `openai-api-curated` for
-   API-key authentication.
+Then open the repository in VS Code and run **Dev Containers: Reopen in
+Container**. If the repository ships its own `.devcontainer/`, VS Code asks
+which configuration to open; pick `project-adhd`.
 
-   ```bash
-   bash .devcontainer/post-create.sh
-   ```
+The first time on a host, authenticate inside the container, then finish
+setup:
 
-5. **Verify.**
+```bash
+gh auth login        # always
+claude auth login    # if claude is in AGENT_TOOLS
+codex login          # if codex is in AGENT_TOOLS
+gemini               # start once and sign in, if gemini is in AGENT_TOOLS
+bash .devcontainer/project-adhd/post-create.sh
+.devcontainer/project-adhd/verify.sh
+```
 
-   ```bash
-   .devcontainer/verify.sh
-   ```
+Every repository you attach afterwards finds those logins already in place.
+`verify.sh` reports `SKIP` for unselected tools and a failure for a selected
+tool that is not configured yet.
 
-   Checks for unselected tools report `SKIP`; a selected tool that is not yet
-   configured reports a failure, which is the expected result if you run this
-   before completing steps 3 and 4.
+**What `attach` writes.** Everything lives in
+`.devcontainer/project-adhd/`, which contains a `.gitignore` of `*` so git
+never sees it. It also adds a marked block to `.git/info/exclude` covering the
+directories agents create at the repository root (`.worktrees/`,
+`.claude/worktrees/`, `.superpowers/`, `docs/superpowers/`). `git status`
+stays clean.
 
-Changing `AGENT_TOOLS` after the container is already built requires **Dev
-Containers: Rebuild Container** so Compose re-reads `devcontainer.env`,
-followed by rerunning `bash .devcontainer/post-create.sh`.
+**Worktrees.** `git worktree add` does not copy untracked files, so run
+`adhd attach .` inside each new worktree. Each worktree gets its own
+container.
 
-Complete the OMP provider setup if OMP asks for it after authentication.
-Credentials and configuration stay in this project's state volumes; they are
-not shared with another generated project.
+## Start a new project
+
+```bash
+adhd new my-project --agents claude    # private; add --public for a public repository
+```
+
+This creates the repository with `gh`, clones it, and attaches project-adhd
+in tracked mode (`--track`): `.devcontainer/project-adhd/` becomes part of the
+repository, with only its local files (`.env`, `devcontainer.env`) ignored.
+Nothing is committed for you.
 
 ## Choosing your agent tools
 
-`AGENT_TOOLS` in `.devcontainer/devcontainer.env` controls which agent CLIs
-are installed and verified. It is a comma-separated list drawn from `claude`,
-`codex`, `gemini`, and `omp`:
+`AGENT_TOOLS` in `.devcontainer/project-adhd/devcontainer.env` controls which
+agent CLIs are installed and verified. `adhd attach --agents` sets it; without
+the flag, `attach` asks, or selects all four when it cannot ask.
 
 ```bash
 AGENT_TOOLS=claude          # Claude Code only
 AGENT_TOOLS=claude,codex    # Claude Code and Codex
 ```
 
-Leave it unset or empty to select all four. An unrecognized value fails the
-run rather than being silently ignored.
+Empty selects all four; an unrecognized value fails the run. `rtk` and the
+GitHub CLI are always installed. Changing it later requires **Dev Containers:
+Rebuild Container**, then `bash .devcontainer/project-adhd/post-create.sh`.
 
-`rtk` and the GitHub CLI are always installed — RTK is a proxy consumed by the
-agents rather than an agent itself.
-
-Two constraints are worth knowing before you choose:
-
-- **OMP Superpowers requires Claude.** OMP sources the Superpowers package
-  from Claude's installed plugin, so `omp` needs `claude` selected *and*
-  authenticated. Otherwise OMP is installed and configured, and its
-  Superpowers step is skipped with a message.
+- **OMP Superpowers requires Claude.** OMP sources the Superpowers package from
+  Claude's installed plugin, so `omp` needs `claude` selected and
+  authenticated; otherwise its Superpowers step is skipped with a message.
 - **Gemini CLI has no RTK integration** and no Archify destination today.
 
-## Security
+## State and isolation
 
-`post-create.sh` fetches and executes vendor installers, and the container has
-access to the host Docker daemon. See [SECURITY.md](SECURITY.md) for exactly
-what runs, from where, and where credentials live.
+| Volume | Scope |
+|---|---|
+| `project-adhd-shared-claude`, `-gh`, `-codex`, `-gemini`, `-omp`, `-rtk-config` | shared by every attached repository |
+| `project-adhd-shared-lock` | shared; serializes concurrent first-time setup |
+| `<project-prefix>-rtk-data` | this repository only |
 
-## Adapting an existing project
+Agent histories stay separate because each repository is mounted at its own
+path, `/workspaces/<folder-name>`. Two clones with the same folder name open
+at the same time share a history namespace; their histories merge, and
+nothing is lost.
 
-If the generated repository will be used with a project that already has its own source and test files, keep those root application files and remove or replace only template-owned content:
+Each worktree gets its own Compose project name. A `COMPOSE_PROJECT_NAME` set
+in your environment or in the repository's root `.env` may override it (not
+yet verified); `initialize.sh` warns when it finds one.
 
-- `.devcontainer/test/scaffold.test.ts` — template contract suite; remove it if the existing project has its own tests and the template contract is no longer needed.
-- `.omp/lsp.json` — template-owned OMP language-server configuration pointing
-  at the TypeScript under `.devcontainer/`. Remove it if the adopted project
-  does not use OMP, or repoint it at the project's own TypeScript install.
-- `src/` and `test/` — the root directories belong to the adopted project. Remove either only when it contains no existing project files.
-- `README.md` — replaceable project documentation; preserve the relevant Dev Container, authentication, and state-volume instructions if the setup remains in use.
+To keep a repository's agent state private — separate logins included — set
+`AGENT_STATE_SCOPE=project` in its `devcontainer.env` and rebuild.
 
-Keep `.devcontainer/` unless the project's development environment is being replaced. In particular, `devcontainer.json`, `docker-compose.yml`, `initialize.sh`, `post-create.sh`, and `verify.sh` provide the container lifecycle and agent-tool setup. The template's `package.json`, `bun.lock`, and `tsconfig.json` live under `.devcontainer/`; the generated project's root package manifest, lockfile, and TypeScript configuration remain independent. Adapt the root project's own scripts and dependencies without merging them into the template contract.
+Tool binaries are reinstalled on rebuild; logins, plugins, and histories stay
+in the volumes. Deleting `.devcontainer/project-adhd/.env` or
+`devcontainer.env` does not remove any volume.
 
-Deleting `.devcontainer/.env` or `.devcontainer/devcontainer.env` does not clear the named Docker volumes. The initializer recreates missing local files, but deleting `devcontainer.env` loses its local secrets; removing persistent agent state requires a separate, deliberate Docker volume cleanup.
-
-
-## Worktrees and persistent state
-
-Create project-local linked worktrees with:
+## Updating and customizing
 
 ```bash
-git worktree add .worktrees/feature-example -b feature/example
+adhd update              # pull the latest project-adhd
+adhd attach <dir>        # refresh an attached repository
 ```
 
-The generated `.devcontainer/.env` derives `PROJECT_STATE_PREFIX` from the repository name and canonical Git common directory. The selected valid prefix is also persisted in the canonical Git common directory. Linked worktrees therefore reuse it, including a newly created worktree after the repository is moved. Existing valid prefixes are preserved; conflicting canonical/worktree prefixes fail instead of silently switching volumes.
-The local environment files are:
+You can edit an attached repository's runtime files — for example add a Dev
+Container Feature for a toolchain to `devcontainer.json`:
 
-- `.devcontainer/devcontainer.env.example` — tracked template for optional environment variables.
-- `.devcontainer/devcontainer.env` — ignored per-project secrets file, loaded into the workspace container by Compose; initialize it with local values such as `CONTEXT7_API_KEY`.
-- `.devcontainer/.env` — ignored, generated Compose interpolation file containing exactly `PROJECT_STATE_PREFIX=<slug>-<8-hex-id>`.
+```json
+"ghcr.io/devcontainers/features/go:1": {}
+```
 
-These files have different scopes. `.devcontainer/.env` is generated by `initialize.sh` for Compose project and persistent-volume identity; it is not a general-purpose container environment file. `.devcontainer/devcontainer.env` is user-managed local configuration passed into the workspace container through Compose's `env_file` setting. The initializer preserves existing values in `devcontainer.env` and never commits either ignored local environment file.
-Compose gives the seven persistent volumes explicit names based on that prefix:
+`attach` never overwrites a file you edited. When a new version of it ships,
+it writes that version beside it as `<file>.adhd-new` and warns once, so you
+can merge by hand; later refreshes stay quiet until another version ships.
 
-- `${PROJECT_STATE_PREFIX}-claude`
-- `${PROJECT_STATE_PREFIX}-gh`
-- `${PROJECT_STATE_PREFIX}-rtk-config`
-- `${PROJECT_STATE_PREFIX}-rtk-data`
-- `${PROJECT_STATE_PREFIX}-codex`
-- `${PROJECT_STATE_PREFIX}-gemini`
-- `${PROJECT_STATE_PREFIX}-omp`
+## Detaching
 
-Tool binaries are reinstalled on rebuild; authentication, plugin files, histories, and other state remain in these volumes. Do not commit either ignored local environment file.
+```bash
+adhd detach [dir]
+```
+
+Removes `.devcontainer/project-adhd/` (including its `devcontainer.env`) and
+the ignore block. Docker volumes are kept; the command prints how to list
+them.
 
 ## Compose projects launched from the Dev Container
 
-The Docker daemon used from inside the Dev Container runs on the host. Any bind source supplied to an added Compose project must therefore be a daemon-visible host path; do not use a path that exists only inside the container, such as `/workspace`, as a host bind source.
+The Docker daemon used from inside the container runs on the host, so any
+bind source in a Compose project you start from inside must be a host path.
+Do not use a container path such as `/workspaces/<name>` as a bind source.
 
-`LOCAL_WORKSPACE_FOLDER` identifies the host main-checkout anchor passed into the container. For a linked worktree, do not treat it as the current worktree path: derive the current worktree path relative to the shared/main checkout (for example, `.worktrees/feature-example`), then append that offset to the daemon-visible host main-checkout anchor before constructing bind mounts. This keeps Compose paths correct for both the main checkout and linked worktrees.
+`LOCAL_WORKSPACE_FOLDER` is the host path of the folder VS Code opened. For a
+linked worktree, that is the worktree's own host path.
 
-Run the nested template contract, strict TypeScript check, and non-mutating tool smoke check from the repository root:
+## Migrating from the template layout
+
+Projects generated from the old GitHub template keep working as they are.
+To move a project's existing logins into the shared volumes, copy each one
+(`<old-prefix>` is the `PROJECT_STATE_PREFIX` from its old
+`.devcontainer/.env`):
 
 ```bash
-(cd .devcontainer && bun test)
-(cd .devcontainer && bun run typecheck)
-.devcontainer/verify.sh
+old=<old-prefix>
+for v in claude gh rtk-config codex gemini omp; do
+  docker volume create "project-adhd-shared-$v" >/dev/null
+  docker run --rm -v "$old-$v:/from:ro" -v "project-adhd-shared-$v:/to" \
+    mcr.microsoft.com/devcontainers/base@sha256:d94c97dd9cacf183d0a6fd12a8e87b526e9e928307674ae9c94139139c0c6eae \
+    sh -c 'cp -a /from/. /to/'
+done
+```
+
+`<old-prefix>-rtk-data` keeps its name and needs no copy.
+
+**Existing checkouts of this repository** (made before the runtime moved to
+`.devcontainer/project-adhd/`): move `.devcontainer/devcontainer.env` to
+`.devcontainer/project-adhd/devcontainer.env`, which keeps your
+`AGENT_TOOLS` and keys; delete the old `.devcontainer/.env`; then rebuild the
+container. The old Compose project, `<old-prefix>-devcontainer`, is left
+behind — `docker compose -p <old-prefix>-devcontainer down` removes it, and
+leaves its volumes untouched. Agent histories recorded under `/workspace`
+will not appear under `/workspaces/<name>`, and worktrees created inside the
+old container need `git worktree repair`.
+
+## Security
+
+`post-create.sh` fetches and executes vendor installers, the installer is
+meant to be piped to `bash`, attached repositories share agent credentials,
+and the container can reach the host Docker daemon. See
+[SECURITY.md](SECURITY.md) before using this with code you do not trust.
+
+## Contributing to project-adhd
+
+```bash
+bun install
+bun test
+bun run typecheck
+shellcheck install.sh bin/adhd libexec/adhd/*.sh .devcontainer/project-adhd/*.sh .devcontainer/project-adhd/lib/agent-tools.sh
 ```

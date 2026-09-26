@@ -1,4 +1,4 @@
-name: "${PROJECT_STATE_PREFIX}-devcontainer"
+name: "${COMPOSE_INSTANCE}"
 
 services:
   workspace:
@@ -13,20 +13,23 @@ services:
       - codex-state:/home/vscode/.codex
       - gemini-state:/home/vscode/.gemini
       - omp-state:/home/vscode/.omp
-      - ..:/workspace:cached
+      - lock-state:/home/vscode/.local/state/project-adhd
+      - ../..:/workspaces/${WORKSPACE_NAME}:cached
 
 volumes:
   claude-state:
-    name: "${PROJECT_STATE_PREFIX}-claude"
+    name: "${AGENT_STATE_PREFIX}-claude"
   github-state:
-    name: "${PROJECT_STATE_PREFIX}-gh"
+    name: "${AGENT_STATE_PREFIX}-gh"
   rtk-config-state:
-    name: "${PROJECT_STATE_PREFIX}-rtk-config"
+    name: "${AGENT_STATE_PREFIX}-rtk-config"
   rtk-data-state:
     name: "${PROJECT_STATE_PREFIX}-rtk-data"
   codex-state:
-    name: "${PROJECT_STATE_PREFIX}-codex"
+    name: "${AGENT_STATE_PREFIX}-codex"
   gemini-state:
-    name: "${PROJECT_STATE_PREFIX}-gemini"
+    name: "${AGENT_STATE_PREFIX}-gemini"
   omp-state:
-    name: "${PROJECT_STATE_PREFIX}-omp"
+    name: "${AGENT_STATE_PREFIX}-omp"
+  lock-state:
+    name: "${AGENT_STATE_PREFIX}-lock"
