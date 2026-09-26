@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type CommandResult,
@@ -289,6 +289,43 @@ test("refresh accepts an adopted .adhd-new and later updates that file in place"
     expect(updated.stderr).not.toContain("kept your edited");
     expect(await readFile(editedFile, "utf8")).toBe(await readFile(source, "utf8"));
     expect(existsSync(`${editedFile}.adhd-new`)).toBe(false);
+  });
+});
+
+test("a failed attach leaves no trace and does not block a retry", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout } = await makeInstallation(parent);
+    const root = join(parent, "failed-attach");
+    await makeRepo(root);
+    await rm(join(checkout, RUNTIME, "lib/collect.ts"));
+
+    const failed = await adhd(checkout, ["attach", root, "--agents", "claude"], parent);
+
+    expect(failed.exitCode).not.toBe(0);
+    expect(failed.stderr).toContain("the installation is incomplete");
+    expect(existsSync(join(root, ".devcontainer"))).toBe(false);
+    expect(await status(root)).toBe("");
+
+    await checked(["git", "-C", checkout, "checkout", "--", `${RUNTIME}/lib/collect.ts`], checkout);
+    const retried = await adhd(checkout, ["attach", root, "--agents", "claude"], parent);
+    expect(retried.exitCode).toBe(0);
+    expect(existsSync(join(root, RUNTIME, "lib/collect.ts"))).toBe(true);
+  });
+});
+
+test("a failed refresh keeps the existing runtime and marker and leaves no temp file", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout, root } = await attached(parent, "failed-refresh");
+    const markerPath = join(root, RUNTIME, ".adhd");
+    const marker = await readFile(markerPath, "utf8");
+    await rm(join(checkout, RUNTIME, "lib/collect.ts"));
+
+    const failed = await adhd(checkout, ["attach", root], parent);
+
+    expect(failed.exitCode).not.toBe(0);
+    expect(await readFile(markerPath, "utf8")).toBe(marker);
+    expect(existsSync(join(root, RUNTIME, "lib/collect.ts"))).toBe(true);
+    expect(await checked(["find", join(root, RUNTIME), "-name", ".adhd.*"], root)).toBe("");
   });
 });
 
