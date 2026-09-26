@@ -137,6 +137,7 @@ write_marker() {
   local runtime=$1 mode=$2 marker="$1/.adhd" body revision
 
   body=$(mktemp "$runtime/.adhd.XXXXXX") || die "unable to create a temporary file in $runtime"
+  ATTACH_MARKER_TEMP=$body
   revision=$(git -C "$ADHD_HOME" rev-parse HEAD 2>/dev/null) || revision=unknown
   {
     printf 'mode=%s\n' "$mode"
@@ -145,6 +146,7 @@ write_marker() {
   } > "$body"
   prune_removed "$runtime" "$marker"
   mv -f -- "$body" "$marker"
+  ATTACH_MARKER_TEMP=''
 }
 
 # write_ignore_rules <root> <runtime> <mode>
@@ -190,6 +192,27 @@ print_next_steps() {
 
   note "Attached project-adhd to $root ($mode)"
   printf 'Next: open %s in VS Code and run "Dev Containers: Reopen in Container".\n' "$root"
+}
+
+# Cleanup state for a failed attach; see attach_cleanup.
+ATTACH_RUNTIME=''
+ATTACH_CREATED_RUNTIME=0
+ATTACH_MARKER_TEMP=''
+
+# attach_cleanup: the EXIT trap. On failure it removes the marker temp file and,
+# when this run created the runtime folder, the folder itself, so a failed
+# attach changes nothing and does not block the next one.
+attach_cleanup() {
+  local status=$?
+
+  (( status != 0 )) || return 0
+  if [[ -n "$ATTACH_MARKER_TEMP" ]]; then
+    rm -f -- "$ATTACH_MARKER_TEMP"
+  fi
+  if (( ATTACH_CREATED_RUNTIME )); then
+    rm -rf -- "$ATTACH_RUNTIME"
+    rmdir "$(dirname "$ATTACH_RUNTIME")" 2>/dev/null || true
+  fi
 }
 
 cmd_attach() {
@@ -253,9 +276,19 @@ cmd_attach() {
   fi
 
   choose_agents "$runtime" "$agents" "$agents_given"
+  ATTACH_RUNTIME=$runtime
+  if [[ ! -e "$runtime" ]]; then
+    ATTACH_CREATED_RUNTIME=1
+  fi
+  trap attach_cleanup EXIT
   mkdir -p "$runtime"
+  if [[ "$mode" == untracked ]]; then
+    # Hide the folder from git before anything is copied into it.
+    printf '*\n' > "$runtime/.gitignore"
+  fi
   write_marker "$runtime" "$mode"
   write_ignore_rules "$root" "$runtime" "$mode"
   write_devcontainer_env "$runtime" "$ATTACH_AGENTS"
+  trap - EXIT
   print_next_steps "$root" "$mode"
 }
