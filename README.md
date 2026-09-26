@@ -152,14 +152,15 @@ Removes `.devcontainer/project-adhd/` (including its `devcontainer.env`) and
 the ignore block. Docker volumes are kept; the command prints how to list
 them.
 
-## Compose projects launched from the Dev Container
+## Docker from inside the Dev Container
 
-The Docker daemon used from inside the container runs on the host, so any
-bind source in a Compose project you start from inside must be a host path.
-Do not use a container path such as `/workspaces/<name>` as a bind source.
+The workspace container does not have access to the host Docker daemon.
+Starting Docker or Compose projects from inside the workspace is unsupported
+unless you separately configure access to an isolated or remote daemon. Docker
+on the host is still required for VS Code to build and run the Dev Container.
 
-`LOCAL_WORKSPACE_FOLDER` is the host path of the folder VS Code opened. For a
-linked worktree, that is the worktree's own host path.
+`LOCAL_WORKSPACE_FOLDER` remains the host path of the folder VS Code opened.
+For a linked worktree, that is the worktree's own host path.
 
 ## Migrating from the template layout
 
@@ -193,9 +194,8 @@ old container need `git worktree repair`.
 ## Security
 
 `post-create.sh` fetches and executes vendor installers, the installer is
-meant to be piped to `bash`, attached repositories share agent credentials,
-and the container can reach the host Docker daemon. See
-[SECURITY.md](SECURITY.md) before using this with code you do not trust.
+meant to be piped to `bash`, and attached repositories share agent credentials.
+See [SECURITY.md](SECURITY.md) before using this with code you do not trust.
 
 ## Contributing to project-adhd
 

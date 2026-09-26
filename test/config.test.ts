@@ -111,14 +111,23 @@ test("renders a per-worktree Compose project with shared agent volumes read from
   });
 });
 
-test("opens the workspace at /workspaces/<folder> with runtime-folder lifecycle commands", async () => {
-  const config = JSON.parse(await readFile(devcontainerConfigPath, "utf8")) as Record<string, unknown>;
+test("opens the workspace at /workspaces/<folder> with runtime-folder lifecycle commands and no host Docker feature", async () => {
+  const config = JSON.parse(await readFile(devcontainerConfigPath, "utf8")) as {
+    workspaceFolder?: string;
+    initializeCommand?: string;
+    postCreateCommand?: string;
+    updateContentCommand?: unknown;
+    features?: Record<string, unknown>;
+  };
   expect(config.workspaceFolder).toBe("/workspaces/${localWorkspaceFolderBasename}");
   expect(config.initializeCommand).toBe(
     'bash "${localWorkspaceFolder}/.devcontainer/project-adhd/initialize.sh" "${localWorkspaceFolder}"',
   );
   expect(config.postCreateCommand).toBe("bash .devcontainer/project-adhd/post-create.sh");
   expect(config.updateContentCommand).toBeUndefined();
+  expect(config.features).not.toHaveProperty(
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1",
+  );
 });
 
 test("configures Gemini CLI for manual authentication", async () => {

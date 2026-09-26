@@ -41,17 +41,17 @@ does not allow that, fork project-adhd and pin the installers yourself.
 The base image *is* pinned, by digest, in
 `.devcontainer/project-adhd/docker-compose.yml`.
 
-## Host Docker socket
+## Host Docker access
 
-The `docker-outside-of-docker` Dev Container feature exposes the **host**
-Docker daemon inside the container. Any process in the container can therefore
-control host containers, images, and volumes. This is a deliberate tradeoff
-that lets Compose projects be launched from inside the environment; it is not
-a sandbox boundary.
+The Dev Container does not enable a Docker-outside-of-Docker feature or mount
+the host Docker socket. Docker on the host is still used by VS Code to create
+and run the Dev Container, but processes inside the workspace cannot use that
+daemon through this configuration. Existing containers need to be rebuilt for
+the change to take effect.
 
-For repositories you do not trust, this is the larger exposure: the Docker
-socket gives code in the container control of the host. Separating
-credentials per repository does not change that.
+This removes the direct Docker-daemon control path, not all host exposure:
+the workspace repository itself is bind-mounted into the container, so
+processes inside can read and modify files in that repository.
 
 ## Credentials at rest, and shared state
 
