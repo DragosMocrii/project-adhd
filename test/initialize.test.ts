@@ -259,3 +259,27 @@ test("rejects an unknown AGENT_STATE_SCOPE", async () => {
     expect(result.stderr).toContain("invalid AGENT_STATE_SCOPE 'global'");
   });
 });
+
+test("warns, without failing, when an upstream COMPOSE_PROJECT_NAME may override the Compose project", async () => {
+  await withTemporaryParent(async (parent) => {
+    const root = join(parent, "upstream-name");
+    await mkdir(root);
+    await prepareRepository(root);
+    const initializer = join(root, ".devcontainer", "project-adhd", "initialize.sh");
+
+    const quiet = await run([hostBash, initializer, root], root);
+    expect(quiet.exitCode).toBe(0);
+    expect(quiet.stderr).not.toContain("COMPOSE_PROJECT_NAME");
+
+    await writeFile(join(root, ".env"), "OTHER=1\nCOMPOSE_PROJECT_NAME=upstream\n");
+    const fromFile = await run([hostBash, initializer, root], root);
+    expect(fromFile.exitCode).toBe(0);
+    expect(fromFile.stderr).toContain("COMPOSE_PROJECT_NAME is set");
+    expect(fromFile.stderr).toContain(join(root, ".env"));
+
+    await rm(join(root, ".env"));
+    const fromEnvironment = await run([hostBash, initializer, root], root, { COMPOSE_PROJECT_NAME: "upstream" });
+    expect(fromEnvironment.exitCode).toBe(0);
+    expect(fromEnvironment.stderr).toContain("COMPOSE_PROJECT_NAME is set (in the environment)");
+  });
+});

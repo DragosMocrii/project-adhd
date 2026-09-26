@@ -245,3 +245,23 @@ COMPOSE_INSTANCE=$SELECTED_PREFIX-$worktree_id
 AGENT_STATE_PREFIX=$agent_state_prefix
 WORKSPACE_NAME=$workspace_name
 "
+
+# The Dev Containers tooling may take the Compose project name from
+# COMPOSE_PROJECT_NAME before this configuration's own `name:`.
+compose_name_source=''
+if [[ -n "${COMPOSE_PROJECT_NAME-}" ]]; then
+  compose_name_source='in the environment'
+elif [[ -f "$workspace_root/.env" && -r "$workspace_root/.env" ]]; then
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    case "$line" in
+      COMPOSE_PROJECT_NAME=*)
+        compose_name_source="in $workspace_root/.env"
+        break
+        ;;
+    esac
+  done < "$workspace_root/.env"
+fi
+if [[ -n "$compose_name_source" ]]; then
+  printf "initialize.sh: warning: COMPOSE_PROJECT_NAME is set (%s); the Dev Containers extension may use it instead of this worktree's own Compose project name\n" \
+    "$compose_name_source" >&2
+fi

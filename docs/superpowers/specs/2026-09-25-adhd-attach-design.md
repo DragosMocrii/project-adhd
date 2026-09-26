@@ -435,3 +435,5 @@ Each of these either gets confirmed, or changes the design before merge:
 5. `updateRemoteUserUID` applies to this Compose configuration on a Linux host
    with a UID other than 1000.
    Pending — host verification (plan Task 14, Steps 2–5); cannot run inside the Dev Container.
+6. Whether COMPOSE_PROJECT_NAME in the environment or an upstream root .env overrides name: "${COMPOSE_INSTANCE}".
+   Pending — host verification; initialize.sh warns when it is set.

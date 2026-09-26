@@ -113,6 +113,10 @@ path, `/workspaces/<folder-name>`. Two clones with the same folder name open
 at the same time share a history namespace; their histories merge, and
 nothing is lost.
 
+Each worktree gets its own Compose project name. A `COMPOSE_PROJECT_NAME` set
+in your environment or in the repository's root `.env` may override it (not
+yet verified); `initialize.sh` warns when it finds one.
+
 To keep a repository's agent state private — separate logins included — set
 `AGENT_STATE_SCOPE=project` in its `devcontainer.env` and rebuild.
 
