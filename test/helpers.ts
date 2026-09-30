@@ -144,7 +144,7 @@ export async function makeInstallation(parent: string): Promise<{ checkout: stri
   const checkout = join(parent, "installation");
   const listed = await checked(
     ["git", "ls-files", "--cached", "--others", "--exclude-standard", "--",
-      "bin", "libexec", ".devcontainer/project-adhd", "install.sh", "VERSION"],
+      "bin", "libexec", ".devcontainer/project-adhd", "install.sh"],
     repoRoot,
   );
   await mkdir(source, { recursive: true });
@@ -156,6 +156,9 @@ export async function makeInstallation(parent: string): Promise<{ checkout: stri
   for (const executable of ["bin/adhd", "install.sh"]) {
     if (existsSync(join(source, executable))) await chmod(join(source, executable), 0o755);
   }
+  // Fixtures must not depend on the released version: the repository's VERSION
+  // changes with every release PR, so pin the fixture's own to 0.0.0.
+  await writeFile(join(source, "VERSION"), "0.0.0\n");
   await makeRepo(source, {});
   await checked(["git", "clone", "-q", "--bare", source, origin], parent);
   await checked(["git", "clone", "-q", origin, checkout], parent);
