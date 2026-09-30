@@ -92,5 +92,7 @@ suspect a changed JSON shape first and open an issue.
 
 ## Reporting a vulnerability
 
-Open a GitHub issue for anything affecting project-adhd's own scripts. For
-vulnerabilities in the installed agent CLIs, report to those vendors directly.
+Report vulnerabilities in project-adhd's own scripts privately, through
+[GitHub private vulnerability reporting](https://github.com/DragosMocrii/project-adhd/security/advisories/new).
+Do not open a public issue for them. For vulnerabilities in the installed
+agent CLIs, report to those vendors directly.

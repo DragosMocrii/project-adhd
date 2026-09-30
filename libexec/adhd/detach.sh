@@ -55,6 +55,7 @@ cmd_detach() {
   root=$(require_worktree_root "$target")
   runtime="$root/$ADHD_RUNTIME_REL"
   marker="$runtime/.adhd"
+  refuse_symlinks "$root"
   [[ -d "$runtime" ]] || die "nothing to detach: $ADHD_RUNTIME_REL does not exist in $root"
   [[ -f "$marker" ]] || die "$ADHD_RUNTIME_REL in $root was not created by adhd; refusing to remove it"
   mode=$(marker_get "$marker" mode) || die "unreadable marker: $marker"

@@ -70,6 +70,21 @@ require_worktree_root() {
   printf '%s\n' "$canonical"
 }
 
+# refuse_symlinks <root>: dies when .devcontainer, the runtime folder, or
+# anything inside it is a symlink. A repository can commit symlinks, and
+# following one would redirect adhd's writes or rm -rf outside the worktree.
+refuse_symlinks() {
+  local root=$1 path found
+
+  for path in "$root/.devcontainer" "$root/$ADHD_RUNTIME_REL"; do
+    [[ ! -L "$path" ]] || die "refusing to follow the symlink $path"
+  done
+  [[ -d "$root/$ADHD_RUNTIME_REL" ]] || return 0
+  found=$(find "$root/$ADHD_RUNTIME_REL" -type l -print) ||
+    die "unable to inspect $root/$ADHD_RUNTIME_REL"
+  [[ -z "$found" ]] || die "refusing to follow the symlink ${found%%$'\n'*}"
+}
+
 git_common_dir() {
   local root=$1 reported
 
@@ -103,6 +118,7 @@ marker_get() {
 remove_block() {
   local file=$1 line inside=0 temporary
 
+  [[ ! -L "$file" ]] || die "refusing to follow the symlink $file"
   [[ -f "$file" ]] || return 0
   temporary=$(mktemp "$file.adhd.XXXXXX") || die "unable to create a temporary file next to $file"
   while IFS= read -r line || [[ -n "$line" ]]; do

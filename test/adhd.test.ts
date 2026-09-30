@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type CommandResult,
@@ -538,6 +538,76 @@ test("detach refuses a runtime folder adhd did not create", async () => {
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toContain("was not created by adhd");
     expect(existsSync(join(root, RUNTIME, "devcontainer.json"))).toBe(true);
+  });
+});
+
+test("attach refuses a symlinked .devcontainer and writes nothing through it", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout } = await makeInstallation(parent);
+    const outside = join(parent, "outside");
+    await mkdir(outside);
+    const root = join(parent, "symlinked-devcontainer");
+    await makeRepo(root);
+    await symlink(outside, join(root, ".devcontainer"));
+
+    const result = await adhd(checkout, ["attach", root, "--agents", "claude"], parent);
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("refusing to follow the symlink");
+    expect(existsSync(join(outside, "project-adhd"))).toBe(false);
+  });
+});
+
+test("attach refuses a symlink inside the runtime folder", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout } = await makeInstallation(parent);
+    const victim = join(parent, "victim");
+    await writeFile(victim, "precious\n");
+    const root = join(parent, "symlinked-runtime-file");
+    await makeRepo(root, { [`${RUNTIME}/.adhd`]: "mode=tracked\n", [`${RUNTIME}/initialize.sh`]: "edited\n" });
+    await symlink(victim, join(root, RUNTIME, "initialize.sh.adhd-new"));
+
+    const result = await adhd(checkout, ["attach", root, "--track", "--agents", "claude"], parent);
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("refusing to follow the symlink");
+    expect(await readFile(victim, "utf8")).toBe("precious\n");
+  });
+});
+
+test("attach --track refuses a symlinked root .gitignore", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout } = await makeInstallation(parent);
+    const victim = join(parent, "victim");
+    await writeFile(victim, "precious\n");
+    const root = join(parent, "symlinked-gitignore");
+    await makeRepo(root);
+    await symlink(victim, join(root, ".gitignore"));
+
+    const result = await adhd(checkout, ["attach", root, "--track", "--agents", "claude"], parent);
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("refusing to follow the symlink");
+    expect(await readFile(victim, "utf8")).toBe("precious\n");
+    expect(existsSync(join(root, ".devcontainer"))).toBe(false);
+  });
+});
+
+test("detach refuses a symlinked .devcontainer and keeps its target", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout } = await makeInstallation(parent);
+    const other = join(parent, "other");
+    await makeRepo(other);
+    expect((await adhd(checkout, ["attach", other, "--agents", "claude"], parent)).exitCode).toBe(0);
+    const root = join(parent, "symlinked-detach");
+    await makeRepo(root);
+    await symlink(join(other, ".devcontainer"), join(root, ".devcontainer"));
+
+    const result = await adhd(checkout, ["detach", root], parent);
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("refusing to follow the symlink");
+    expect(existsSync(join(other, RUNTIME, "devcontainer.env"))).toBe(true);
   });
 });
 

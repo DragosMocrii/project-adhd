@@ -261,6 +261,10 @@ cmd_attach() {
   root=$(require_worktree_root "$target")
   runtime="$root/$ADHD_RUNTIME_REL"
   marker="$runtime/.adhd"
+  refuse_symlinks "$root"
+  if [[ "$mode" == tracked ]]; then
+    [[ ! -L "$root/.gitignore" ]] || die "refusing to follow the symlink $root/.gitignore"
+  fi
 
   if [[ -e "$runtime" ]]; then
     [[ -f "$marker" ]] ||
