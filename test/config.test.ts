@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -177,12 +178,15 @@ test("documents installing adhd and attaching it, not the retired template flow"
   expect(readme).not.toContain("--template");
 });
 
-test("ships agent guidance that Claude and Codex both resolve", async () => {
+test("ships agent guidance only as AGENTS.md", async () => {
   const agents = await readFile(join(repoRoot, "AGENTS.md"), "utf8");
-  const claude = await readFile(join(repoRoot, "CLAUDE.md"), "utf8");
 
   expect(agents).toContain("AGENT_TOOLS");
   expect(agents).toContain(".devcontainer/project-adhd/");
   expect(agents).toContain("bash 3.2");
-  expect(claude.trim()).toBe("@AGENTS.md");
+  expect(agents).toContain("Conventional Commits");
+  // Claude Code reads AGENTS.md only when no project CLAUDE.md exists.
+  for (const file of ["CLAUDE.md", ".claude/CLAUDE.md", "CLAUDE.local.md"]) {
+    expect(existsSync(join(repoRoot, file))).toBe(false);
+  }
 });

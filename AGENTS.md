@@ -38,6 +38,22 @@ runtime it attaches to other Git repositories.
 - Agent CLI installers are intentionally unpinned. Do not add version pins
   without changing `SECURITY.md` to match.
 - `NO_BROWSER=true` is container-wide on purpose; a contract test asserts it.
+- Agent guidance lives only in this file. Do not add a `CLAUDE.md`: Claude
+  Code reads `AGENTS.md` only when no project `CLAUDE.md` exists, and a
+  contract test asserts there is none.
+
+## Commits
+
+Commit titles follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/):
+`<type>[optional scope][!]: <description>`.
+
+- Types: `feat`, `fix`, `docs`, `test`, `refactor`, `ci`, `chore`, `build`,
+  `perf`, `style`, `revert`.
+- The scope is optional and names the area touched, such as a subcommand or
+  script: `fix(attach): …`, `feat(initialize): …`.
+- The description is lowercase, imperative, and has no trailing period.
+- Mark a breaking change with `!` before the colon, or with a
+  `BREAKING CHANGE:` footer.
 
 ## AGENT_TOOLS
 
