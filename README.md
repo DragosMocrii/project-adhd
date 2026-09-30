@@ -98,7 +98,7 @@ Rebuild Container**, then `bash .devcontainer/project-adhd/post-create.sh`.
 - **OMP Superpowers requires Claude.** OMP sources the Superpowers package from
   Claude's installed plugin, so `omp` needs `claude` selected and
   authenticated; otherwise its Superpowers step is skipped with a message.
-- **Gemini CLI has no RTK integration** and no Archify destination today.
+- **Gemini CLI has no RTK integration** and no Archify destination.
 
 ## State and isolation
 
@@ -113,9 +113,9 @@ path, `/workspaces/<folder-name>`. Two clones with the same folder name open
 at the same time share a history namespace; their histories merge, and
 nothing is lost.
 
-Each worktree gets its own Compose project name. A `COMPOSE_PROJECT_NAME` set
-in your environment or in the repository's root `.env` may override it (not
-yet verified); `initialize.sh` warns when it finds one.
+Each worktree gets its own Compose project name. `COMPOSE_PROJECT_NAME` in
+your environment or the repository's root `.env` may override it;
+`initialize.sh` warns when it finds one.
 
 To keep a repository's agent state private — separate logins included — set
 `AGENT_STATE_SCOPE=project` in its `devcontainer.env` and rebuild.
@@ -161,35 +161,6 @@ on the host is still required for VS Code to build and run the Dev Container.
 
 `LOCAL_WORKSPACE_FOLDER` remains the host path of the folder VS Code opened.
 For a linked worktree, that is the worktree's own host path.
-
-## Migrating from the template layout
-
-Projects generated from the old GitHub template keep working as they are.
-To move a project's existing logins into the shared volumes, copy each one
-(`<old-prefix>` is the `PROJECT_STATE_PREFIX` from its old
-`.devcontainer/.env`):
-
-```bash
-old=<old-prefix>
-for v in claude gh rtk-config codex gemini omp; do
-  docker volume create "project-adhd-shared-$v" >/dev/null
-  docker run --rm -v "$old-$v:/from:ro" -v "project-adhd-shared-$v:/to" \
-    mcr.microsoft.com/devcontainers/base@sha256:d94c97dd9cacf183d0a6fd12a8e87b526e9e928307674ae9c94139139c0c6eae \
-    sh -c 'cp -a /from/. /to/'
-done
-```
-
-`<old-prefix>-rtk-data` keeps its name and needs no copy.
-
-**Existing checkouts of this repository** (made before the runtime moved to
-`.devcontainer/project-adhd/`): move `.devcontainer/devcontainer.env` to
-`.devcontainer/project-adhd/devcontainer.env`, which keeps your
-`AGENT_TOOLS` and keys; delete the old `.devcontainer/.env`; then rebuild the
-container. The old Compose project, `<old-prefix>-devcontainer`, is left
-behind — `docker compose -p <old-prefix>-devcontainer down` removes it, and
-leaves its volumes untouched. Agent histories recorded under `/workspace`
-will not appear under `/workspaces/<name>`, and worktrees created inside the
-old container need `git worktree repair`.
 
 ## Security
 
