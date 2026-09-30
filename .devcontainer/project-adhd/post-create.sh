@@ -168,7 +168,7 @@ configure_rtk() {
     PI_CODING_AGENT_DIR="$HOME/.omp/agent" rtk init -g --agent pi
   fi
 
-  # Gemini CLI has no rtk integration today. This is intentional, not an omission.
+  # Gemini CLI has no rtk integration yet; skipping it is intentional.
 }
 
 parse_claude_plugin_field() {
@@ -342,9 +342,8 @@ install_archify() {
   fi
 
   if (( ${#agents[@]} == 0 )); then
-    # Only omp is selected. The skills CLI still needs an agent target to
-    # materialize "$source"; claude-code serves purely as that source and
-    # only the OMP destination is populated below.
+    # Only omp is selected, but the skills CLI needs an agent target to create
+    # "$source". claude-code is used only for that; just OMP gets a copy below.
     agents=(claude-code)
   fi
 
@@ -369,7 +368,7 @@ with_shared_state_lock() {
     flock -w "$POST_CREATE_LOCK_TIMEOUT" 9 ||
       die "timed out after ${POST_CREATE_LOCK_TIMEOUT}s waiting for $POST_CREATE_LOCK_FILE"
   fi
-  # 9>&- keeps the lock fd out of child processes, so a stray background child cannot pin it.
+  # 9>&- closes the lock fd in children, so a stray background child cannot hold the lock.
   "$@" 9>&-
   flock -u 9
   exec 9>&-

@@ -75,10 +75,9 @@ in_manifest() {
   return 1
 }
 
-# copy_runtime <runtime> <marker>: copies every runtime file, printing one sha
-# line each, conffile-style. A file the user edited since the last offer is
-# kept; when a new version ships it is written beside it as <file>.adhd-new
-# and recorded, so the same version is offered only once.
+# copy_runtime <runtime> <marker>: copies every runtime file and prints its sha
+# line. A file the user edited is kept; a new shipped version is written beside
+# it as <file>.adhd-new, and its sha is recorded so it is offered only once.
 copy_runtime() {
   local runtime=$1 marker=$2 file source destination recorded='' shipped current
 

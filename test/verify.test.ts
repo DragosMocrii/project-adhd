@@ -9,7 +9,7 @@ import {
   writeStubs,
 } from "./helpers";
 
-// tr stub for test environment: converts [:upper:] to [:lower:]
+// tr stub that lowercases its input.
 const trStub = `#!/bin/bash
 result=""
 while IFS= read -r -n1 char || [[ -n "\$char" ]]; do

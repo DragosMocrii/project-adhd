@@ -4,8 +4,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { repoRoot } from "./helpers";
 
-// Every script that runs on the host. Files that do not exist yet are skipped,
-// so later tasks are covered as soon as they create their files.
+// Every script that runs on the host. Missing files are skipped.
 const HOST_SCRIPTS = [
   "install.sh",
   "bin/adhd",

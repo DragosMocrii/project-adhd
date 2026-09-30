@@ -5,8 +5,7 @@
 #
 # Run from a project-adhd checkout, it links that checkout instead of cloning.
 # Host code: must stay bash 3.2-compatible with BSD or GNU userland.
-# Everything runs from main, called on the last line, so a truncated download
-# does nothing.
+# main is called on the last line, so a truncated download runs nothing.
 set -euo pipefail
 
 die() {

@@ -13,10 +13,9 @@ runtime it attaches to other Git repositories.
 - `.devcontainer/project-adhd/lib/` — shared units. `agent-tools.sh` parses
   `AGENT_TOOLS` and is sourced by `post-create.sh`, `verify.sh`, and `adhd`;
   the `*.ts` modules parse agent-CLI plugin JSON.
-- `test/` — the contract suite, split by where code runs: host
-  (`initialize`, `adhd`, `install`, `agent-tools`, `portability`) and
-  container (`post-create`, `verify`), plus static `config` checks and
-  `parsers` (unit tests for the plugin-JSON modules).
+- `test/` — the contract suite. Host tests: `initialize`, `adhd`, `install`,
+  `agent-tools`, `portability`. Container tests: `post-create`, `verify`.
+  Also `config` (static checks) and `parsers` (plugin-JSON module tests).
 - `package.json`, `bun.lock`, `tsconfig.json` — the suite's own tooling.
 
 ## Conventions
@@ -31,10 +30,9 @@ runtime it attaches to other Git repositories.
   `libexec/adhd/common.sh`; a contract test fails otherwise.
 - No `jq`. JSON is parsed by the Bun modules under
   `.devcontainer/project-adhd/lib/`.
-- Plugin-detection logic lives only in those modules. Do not reintroduce
-  inline `bun -e` parsers in the shell scripts. The one deliberate exception
-  is `check_claude_settings` in `verify.sh`, which inspects a Claude settings
-  file rather than CLI plugin output.
+- Plugin detection lives only in those modules; do not add inline `bun -e`
+  parsers to the shell scripts. The one exception is `check_claude_settings`
+  in `verify.sh`, which reads a Claude settings file, not CLI plugin output.
 - Agent CLI installers are intentionally unpinned. Do not add version pins
   without changing `SECURITY.md` to match.
 - `NO_BROWSER=true` is container-wide on purpose; a contract test asserts it.

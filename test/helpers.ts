@@ -94,7 +94,6 @@ export async function writeStubs(
 }
 
 // Every directory post-create.sh repairs; pre-creating them keeps tests off sudo.
-// Task 6 appends ".local/state" and ".local/state/project-adhd".
 export const STATE_DIRECTORIES = [
   ".claude",
   ".config/gh",

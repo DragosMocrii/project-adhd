@@ -57,9 +57,8 @@ workspace_name=${workspace_name##*/}
 if [[ -z "$workspace_name" ]]; then
   die "unable to derive a workspace name from: $workspace_root"
 fi
-# WORKSPACE_NAME is written unquoted to Compose's .env, where these characters
-# would be interpolated or start a comment, breaking the mount path; a colon
-# splits Compose's short-syntax bind mount.
+# WORKSPACE_NAME goes unquoted into Compose's .env, where these characters are
+# interpolated or start a comment, and a colon splits the bind-mount syntax.
 case "$workspace_name" in
   *'$'*|*'"'*|*"'"*|*\\*|*' #'*|*:*)
     die "the folder name '$workspace_name' contains \$, a quote, a backslash, ' #', or a colon; rename the folder"

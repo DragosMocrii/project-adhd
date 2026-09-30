@@ -1,12 +1,9 @@
 #!/usr/bin/env bash
-# Agent tool selection, shared by post-create.sh and verify.sh.
+# Agent tool selection. Sourced, never executed, by post-create.sh, verify.sh,
+# and the host adhd CLI, so it must stay bash 3.2-compatible.
 #
 # AGENT_TOOLS is a comma-separated list drawn from AGENT_TOOLS_KNOWN.
-# Unset or empty selects every known tool, so an unconfigured project
-# behaves exactly as it did before selection existed.
-#
-# Sourced on the host by adhd as well, so it must stay bash 3.2-compatible.
-# This file is sourced, never executed.
+# Unset or empty selects every known tool.
 
 AGENT_TOOLS_KNOWN=(claude codex gemini omp)
 AGENT_TOOLS_SELECTED=()
