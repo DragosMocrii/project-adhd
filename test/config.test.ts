@@ -190,3 +190,28 @@ test("ships agent guidance only as AGENTS.md", async () => {
     expect(existsSync(join(repoRoot, file))).toBe(false);
   }
 });
+
+test("release-please owns VERSION with the agreed 0.x bump rules", async () => {
+  const config = JSON.parse(await readFile(join(repoRoot, "release-please-config.json"), "utf8"));
+  const pkg = config.packages["."];
+  expect(pkg["release-type"]).toBe("simple");
+  expect(pkg["version-file"]).toBe("VERSION");
+  expect(pkg["include-component-in-tag"]).toBe(false);
+  expect(pkg["include-v-in-tag"]).toBe(true);
+  expect(pkg["bump-minor-pre-major"]).toBe(true);
+  expect(pkg["bump-patch-for-minor-pre-major"]).toBe(true);
+
+  const manifest = JSON.parse(await readFile(join(repoRoot, ".release-please-manifest.json"), "utf8"));
+  const version = await readFile(join(repoRoot, "VERSION"), "utf8");
+  expect(version).toMatch(/^\d+\.\d+\.\d+\n?$/);
+  expect(manifest["."]).toBe(version.trim());
+});
+
+test("the release workflow pins every action to a commit", async () => {
+  const workflow = await readFile(join(repoRoot, ".github/workflows/release.yml"), "utf8");
+  const uses = workflow.split("\n").filter((line) => /^\s*(-\s*)?uses:/.test(line));
+  expect(uses.length).toBeGreaterThan(0);
+  for (const line of uses) {
+    expect(line).toMatch(/uses:\s+[\w.-]+\/[\w.-]+@[0-9a-f]{40}\s+#\s+v\d+\.\d+\.\d+\s*$/);
+  }
+});
