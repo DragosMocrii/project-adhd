@@ -221,3 +221,46 @@ adhd_channel() {
     printf 'checkout\n'
   fi
 }
+
+ADHD_RELEASES_URL=https://github.com/DragosMocrii/project-adhd/releases
+
+# latest_release_tag <home>: prints the newest vX.Y.Z tag, skipping
+# pre-releases (any tag with a -). Kept identical in install.sh.
+latest_release_tag() {
+  local tags tag
+
+  tags=$(git -C "$1" tag --list 'v[0-9]*' --sort=-v:refname) || return 1
+  while IFS= read -r tag; do
+    case "$tag" in
+      ''|*-*) continue ;;
+    esac
+    printf '%s\n' "$tag"
+    return 0
+  done <<< "$tags"
+  return 1
+}
+
+# move_to_ref <home> <ref>: checks out <ref> in <home>. release is the newest
+# release tag (main while there is none), a tag is checked out detached, and a
+# branch is fast-forwarded to origin. Kept identical in install.sh.
+move_to_ref() {
+  local home=$1 ref=$2 tag
+
+  if [[ "$ref" == release ]]; then
+    if tag=$(latest_release_tag "$home"); then
+      git -C "$home" checkout --quiet --detach "refs/tags/$tag"
+      return
+    fi
+    warn 'no release found; following main'
+    ref=main
+  fi
+  if git -C "$home" show-ref --verify --quiet "refs/tags/$ref"; then
+    git -C "$home" checkout --quiet --detach "refs/tags/$ref"
+  elif git -C "$home" show-ref --verify --quiet "refs/remotes/origin/$ref"; then
+    git -C "$home" checkout --quiet "$ref" &&
+      git -C "$home" merge --quiet --ff-only "origin/$ref"
+  else
+    warn "no release tag or branch named $ref"
+    return 1
+  fi
+}

@@ -6,9 +6,13 @@ import {
   type CommandResult,
   checked,
   commitFiles,
+  headTag,
   hostBash,
   makeInstallation,
   makeRepo,
+  publishRelease,
+  pushCommit,
+  readChannel,
   repoRoot,
   run,
   setChannel,
@@ -632,24 +636,136 @@ test("detach keeps the shared exclude block while another worktree is attached",
   });
 });
 
-test("update fast-forwards the installation", async () => {
+test("update follows main when the channel is main", async () => {
   await withTemporaryParent(async (parent) => {
     const { checkout, origin } = await makeInstallation(parent);
-    const other = join(parent, "other-clone");
-    await checked(["git", "clone", "-q", origin, other], parent);
-    await writeFile(join(other, "NEWS"), "new\n");
-    await checked(["git", "-C", other, "add", "NEWS"], other);
-    await checked(
-      ["git", "-C", other, "-c", "user.email=t@example.invalid", "-c", "user.name=t", "commit", "-q", "-m", "news"],
-      other,
-    );
-    await checked(["git", "-C", other, "push", "-q", "origin", "HEAD"], other);
+    await setChannel(checkout, "main");
+    await pushCommit(parent, origin, { NEWS: "new\n" });
 
     const result = await adhd(checkout, ["update"], parent);
 
     expect(result.exitCode).toBe(0);
     expect(existsSync(join(checkout, "NEWS"))).toBe(true);
     expect(result.stdout).toContain("adhd attach");
+  });
+});
+
+test("update moves a release install to the newest tag and reports it", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout, origin } = await makeInstallation(parent);
+    await setChannel(checkout, "release");
+    for (const version of ["0.1.0", "0.2.0", "0.10.0", "0.3.0-rc.1"]) {
+      await publishRelease(parent, origin, version);
+    }
+
+    const result = await adhd(checkout, ["update"], parent);
+
+    expect(result.exitCode).toBe(0);
+    expect(await headTag(checkout)).toBe("v0.10.0");
+    expect(result.stdout).toContain("Updated project-adhd 0.0.0 → 0.10.0");
+    expect(result.stdout).toContain("releases/tag/v0.10.0");
+    expect(result.stdout).toContain("adhd attach");
+
+    const again = await adhd(checkout, ["update"], parent);
+    expect(again.exitCode).toBe(0);
+    expect(again.stdout).toContain("project-adhd is already at 0.10.0");
+  });
+});
+
+test("update --ref pins a tag, keeps the pin, and --ref release unpins", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout, origin } = await makeInstallation(parent);
+    await setChannel(checkout, "release");
+    await publishRelease(parent, origin, "0.1.0");
+    await publishRelease(parent, origin, "0.2.0");
+
+    expect((await adhd(checkout, ["update", "--ref", "v0.1.0"], parent)).exitCode).toBe(0);
+    expect(await headTag(checkout)).toBe("v0.1.0");
+    expect(await readChannel(checkout)).toBe("v0.1.0");
+
+    await publishRelease(parent, origin, "0.3.0");
+    expect((await adhd(checkout, ["update"], parent)).exitCode).toBe(0);
+    expect(await headTag(checkout)).toBe("v0.1.0");
+
+    expect((await adhd(checkout, ["update", "--ref=release"], parent)).exitCode).toBe(0);
+    expect(await headTag(checkout)).toBe("v0.3.0");
+    expect(await readChannel(checkout)).toBe("release");
+  });
+});
+
+test("update --ref main leaves a detached tag for the branch", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout, origin } = await makeInstallation(parent);
+    await setChannel(checkout, "release");
+    await publishRelease(parent, origin, "0.1.0");
+    expect((await adhd(checkout, ["update"], parent)).exitCode).toBe(0);
+    await pushCommit(parent, origin, { NEWS: "unreleased\n" });
+
+    const result = await adhd(checkout, ["update", "--ref", "main"], parent);
+
+    expect(result.exitCode).toBe(0);
+    expect(existsSync(join(checkout, "NEWS"))).toBe(true);
+    expect((await checked(["git", "-C", checkout, "symbolic-ref", "--short", "HEAD"], checkout)).trim()).toBe("main");
+    expect(await readChannel(checkout)).toBe("main");
+  });
+});
+
+test("update rejects an unknown ref and keeps the channel", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout } = await makeInstallation(parent);
+    await setChannel(checkout, "release");
+
+    const unknown = await adhd(checkout, ["update", "--ref", "v9.9.9"], parent);
+    expect(unknown.exitCode).not.toBe(0);
+    expect(unknown.stderr).toContain("no release tag or branch named v9.9.9");
+    expect(await readChannel(checkout)).toBe("release");
+
+    const reserved = await adhd(checkout, ["update", "--ref", "checkout"], parent);
+    expect(reserved.exitCode).not.toBe(0);
+    expect(reserved.stderr).toContain("checkout is not a ref");
+    expect(await readChannel(checkout)).toBe("release");
+  });
+});
+
+test("update refuses local changes and development checkouts", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout } = await makeInstallation(parent);
+    await setChannel(checkout, "release");
+    await writeFile(join(checkout, "install.sh"), `${await readFile(join(checkout, "install.sh"), "utf8")}# local\n`);
+
+    const dirty = await adhd(checkout, ["update"], parent);
+    expect(dirty.exitCode).not.toBe(0);
+    expect(dirty.stderr).toContain("has local changes");
+    await checked(["git", "-C", checkout, "checkout", "--", "install.sh"], checkout);
+
+    await setChannel(checkout, "checkout");
+    const marked = await adhd(checkout, ["update"], parent);
+    expect(marked.exitCode).not.toBe(0);
+    expect(marked.stderr).toContain("is a development checkout");
+
+    await checked(["git", "-C", checkout, "config", "--unset", "adhd.ref"], checkout);
+    const legacy = await adhd(checkout, ["update"], parent);
+    expect(legacy.exitCode).not.toBe(0);
+    expect(legacy.stderr).toContain("is a development checkout");
+    expect(legacy.stderr).toContain("config adhd.ref release");
+    expect((await checked(["git", "-C", checkout, "symbolic-ref", "--short", "HEAD"], checkout)).trim()).toBe("main");
+  });
+});
+
+test("update migrates a pre-release install at the default location", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { origin } = await makeInstallation(parent);
+    const home = join(parent, "home");
+    const installed = join(home, ".local/share/project-adhd");
+    await mkdir(join(home, ".local/share"), { recursive: true });
+    await checked(["git", "clone", "-q", origin, installed], parent);
+    await publishRelease(parent, origin, "0.1.0");
+
+    const result = await adhd(installed, ["update"], parent, { HOME: home });
+
+    expect(result.exitCode).toBe(0);
+    expect(await headTag(installed)).toBe("v0.1.0");
+    expect(await readChannel(installed)).toBe("release");
   });
 });
 
