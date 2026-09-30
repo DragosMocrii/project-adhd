@@ -5,11 +5,13 @@ import { join } from "node:path";
 import {
   type CommandResult,
   checked,
+  commitFiles,
   hostBash,
   makeInstallation,
   makeRepo,
   repoRoot,
   run,
+  setChannel,
   withTemporaryParent,
   writeStubs,
 } from "./helpers";
@@ -648,5 +650,73 @@ test("update fast-forwards the installation", async () => {
     expect(result.exitCode).toBe(0);
     expect(existsSync(join(checkout, "NEWS"))).toBe(true);
     expect(result.stdout).toContain("adhd attach");
+  });
+});
+
+test("--version reports a clean release tag and the channel", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout } = await makeInstallation(parent);
+    await commitFiles(checkout, { VERSION: "0.1.0\n" }, "chore: release 0.1.0", "v0.1.0");
+    await setChannel(checkout, "release");
+
+    const result = await adhd(checkout, ["--version"], parent);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe("adhd 0.1.0 (release)\n");
+    expect((await adhd(checkout, ["version"], parent)).stdout).toBe("adhd 0.1.0 (release)\n");
+  });
+});
+
+test("--version describes commits past the tag and local changes", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout } = await makeInstallation(parent);
+    await commitFiles(checkout, { VERSION: "0.1.0\n" }, "chore: release 0.1.0", "v0.1.0");
+    await commitFiles(checkout, { NEWS: "one\n" }, "feat: news");
+    await setChannel(checkout, "main");
+
+    const past = await adhd(checkout, ["--version"], parent);
+    expect(past.stdout).toMatch(/^adhd 0\.1\.0\+1\.g[0-9a-f]{7,} \(main\)\n$/);
+
+    await writeFile(join(checkout, "NEWS"), "two\n");
+    const dirty = await adhd(checkout, ["--version"], parent);
+    expect(dirty.stdout).toMatch(/^adhd 0\.1\.0\+1\.g[0-9a-f]{7,}\.dirty \(main\)\n$/);
+  });
+});
+
+test("--version labels a pinned tag and an unmanaged checkout", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout } = await makeInstallation(parent);
+    await commitFiles(checkout, { VERSION: "0.1.0\n" }, "chore: release 0.1.0", "v0.1.0");
+
+    await setChannel(checkout, "v0.1.0");
+    expect((await adhd(checkout, ["--version"], parent)).stdout).toBe("adhd 0.1.0 (pinned v0.1.0)\n");
+
+    await checked(["git", "-C", checkout, "config", "--unset", "adhd.ref"], checkout);
+    expect((await adhd(checkout, ["--version"], parent)).stdout).toBe("adhd 0.1.0 (checkout)\n");
+  });
+});
+
+test("--version falls back to VERSION when git fails", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout } = await makeInstallation(parent);
+    await commitFiles(checkout, { VERSION: "0.1.0\n" }, "chore: release 0.1.0", "v0.1.0");
+    const stubs = join(parent, "stubs");
+    await writeStubs(stubs, { git: "#!/bin/sh\nexit 1\n" });
+
+    const result = await adhd(checkout, ["--version"], parent, { PATH: `${stubs}:${process.env.PATH ?? ""}` });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe("adhd 0.1.0 (checkout)\n");
+  });
+});
+
+test("usage lists version and update --ref", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout } = await makeInstallation(parent);
+
+    const result = await adhd(checkout, ["--help"], parent);
+
+    expect(result.stdout).toContain("  version\n");
+    expect(result.stdout).toContain("  update [--ref <release|branch|tag>]\n");
   });
 });

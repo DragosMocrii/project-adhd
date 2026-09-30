@@ -144,7 +144,7 @@ export async function makeInstallation(parent: string): Promise<{ checkout: stri
   const checkout = join(parent, "installation");
   const listed = await checked(
     ["git", "ls-files", "--cached", "--others", "--exclude-standard", "--",
-      "bin", "libexec", ".devcontainer/project-adhd", "install.sh"],
+      "bin", "libexec", ".devcontainer/project-adhd", "install.sh", "VERSION"],
     repoRoot,
   );
   await mkdir(source, { recursive: true });
@@ -176,4 +176,55 @@ export async function prepareRepository(root: string): Promise<void> {
   await checked(["git", "config", "user.name", "Scaffold Tests"], root);
   await checked(["git", "add", "-A"], root);
   await checked(["git", "commit", "--message=initial"], root);
+}
+
+const TEST_IDENTITY = ["-c", "user.email=project-adhd-tests@example.invalid", "-c", "user.name=project-adhd tests"];
+
+// Writes <files> in <repo>, commits them, and tags the commit when <tag> is given.
+export async function commitFiles(
+  repo: string,
+  files: Record<string, string>,
+  message: string,
+  tag?: string,
+): Promise<void> {
+  for (const [path, contents] of Object.entries(files)) {
+    await mkdir(dirname(join(repo, path)), { recursive: true });
+    await writeFile(join(repo, path), contents);
+  }
+  await checked(["git", "-C", repo, "add", "-A"], repo);
+  await checked(["git", "-C", repo, ...TEST_IDENTITY, "commit", "-q", "-m", message], repo);
+  if (tag !== undefined) await checked(["git", "-C", repo, "tag", tag], repo);
+}
+
+// Commits <files> to <origin>'s main from a scratch clone and pushes it, with <tag> if given.
+export async function pushCommit(
+  parent: string,
+  origin: string,
+  files: Record<string, string>,
+  tag?: string,
+): Promise<void> {
+  const scratch = await mkdtemp(join(parent, "push-"));
+  await checked(["git", "clone", "-q", origin, scratch], parent);
+  await commitFiles(scratch, files, tag === undefined ? "chore: change" : `chore: release ${tag}`, tag);
+  await checked(["git", "-C", scratch, "push", "-q", "origin", "HEAD:main", ...(tag === undefined ? [] : [tag])], scratch);
+  await rm(scratch, { force: true, recursive: true });
+}
+
+// Publishes a release the way release-please does: VERSION bumped, commit tagged v<version>.
+export async function publishRelease(parent: string, origin: string, version: string): Promise<void> {
+  await pushCommit(parent, origin, { VERSION: `${version}\n` }, `v${version}`);
+}
+
+export async function setChannel(installation: string, ref: string): Promise<void> {
+  await checked(["git", "-C", installation, "config", "adhd.ref", ref], installation);
+}
+
+export async function readChannel(installation: string): Promise<string> {
+  const result = await run(["git", "-C", installation, "config", "--get", "adhd.ref"], installation);
+  return result.exitCode === 0 ? result.stdout.trim() : "";
+}
+
+export async function headTag(installation: string): Promise<string> {
+  const result = await run(["git", "-C", installation, "describe", "--tags", "--exact-match", "HEAD"], installation);
+  return result.exitCode === 0 ? result.stdout.trim() : "";
 }

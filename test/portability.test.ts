@@ -12,6 +12,7 @@ const HOST_SCRIPTS = [
   "libexec/adhd/attach.sh",
   "libexec/adhd/detach.sh",
   "libexec/adhd/update.sh",
+  "libexec/adhd/version.sh",
   "libexec/adhd/new.sh",
   ".devcontainer/project-adhd/initialize.sh",
   ".devcontainer/project-adhd/lib/agent-tools.sh",

@@ -170,3 +170,54 @@ require_gh() {
   gh auth status >/dev/null 2>&1 ||
     die 'gh is not authenticated on this host; run: gh auth login'
 }
+
+# adhd_version: prints the running version. On a clean checkout of tag
+# v<VERSION> that is just VERSION; elsewhere git describe adds the commits past
+# the nearest tag and a .dirty suffix, e.g. 0.1.0+5.gabc1234.dirty. Without
+# git it falls back to VERSION alone.
+adhd_version() {
+  local version='' described dirty='' hash count tag
+
+  if [[ -f "$ADHD_HOME/VERSION" ]]; then
+    IFS= read -r version < "$ADHD_HOME/VERSION" || true
+  fi
+  [[ -n "$version" ]] || version=unknown
+  if ! described=$(git -C "$ADHD_HOME" describe --tags --long --dirty --match 'v[0-9]*' 2>/dev/null); then
+    printf '%s\n' "$version"
+    return 0
+  fi
+  case "$described" in
+    *-dirty)
+      dirty=.dirty
+      described=${described%-dirty}
+      ;;
+  esac
+  hash=${described##*-}
+  described=${described%-*}
+  count=${described##*-}
+  tag=${described%-*}
+  if [[ "$count" == 0 && -z "$dirty" && "$tag" == "v$version" ]]; then
+    printf '%s\n' "$version"
+  else
+    printf '%s+%s.%s%s\n' "$version" "$count" "$hash" "$dirty"
+  fi
+}
+
+# adhd_channel: prints what this installation follows (its adhd.ref): release,
+# a branch, a tag, or checkout. Installs from before releases have no adhd.ref;
+# only the default location was made by install.sh, so anywhere else is a
+# checkout someone develops in and must not be moved.
+adhd_channel() {
+  local ref default_home
+
+  if ref=$(git -C "$ADHD_HOME" config --get adhd.ref 2>/dev/null); then
+    printf '%s\n' "$ref"
+    return 0
+  fi
+  default_home=$(cd -P -- "$HOME/.local/share/project-adhd" 2>/dev/null && pwd -P) || default_home=''
+  if [[ -n "$default_home" && "$ADHD_HOME" == "$default_home" ]]; then
+    printf 'release\n'
+  else
+    printf 'checkout\n'
+  fi
+}
