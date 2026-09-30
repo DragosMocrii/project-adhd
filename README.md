@@ -196,6 +196,21 @@ For a linked worktree, that is the worktree's own host path.
 meant to be piped to `bash`, and attached repositories share agent credentials.
 See [SECURITY.md](SECURITY.md) before using this with code you do not trust.
 
+## FAQ
+
+### How do I get a new project up and running with the tools it needs?
+
+Use an agentic tool in the Dev Container to analyze the repository, identify
+the tools needed for its development workflows, and configure those tools in
+the Dev Container. For example, start by asking:
+
+> Analyze this repository and determine what is needed to run its tests.
+> Identify any tools or dependencies that are missing from the Dev Container,
+> and configure the Dev Container so the tests can be run here.
+
+Review the proposed changes, then rebuild the Dev Container if its
+configuration changed.
+
 ## Contributing to project-adhd
 
 ```bash
