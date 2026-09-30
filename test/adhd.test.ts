@@ -650,6 +650,37 @@ test("update follows main when the channel is main", async () => {
   });
 });
 
+test("update reports a move on main even when the version string is unchanged", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout, origin } = await makeInstallation(parent);
+    await setChannel(checkout, "main");
+    await pushCommit(parent, origin, { NEWS: "new\n" });
+
+    const moved = await adhd(checkout, ["update"], parent);
+    expect(moved.exitCode).toBe(0);
+    expect(moved.stdout).toContain("Updated project-adhd");
+    expect(moved.stdout).not.toContain("already at");
+
+    const again = await adhd(checkout, ["update"], parent);
+    expect(again.exitCode).toBe(0);
+    expect(again.stdout).toContain("project-adhd is already at");
+  });
+});
+
+test("update on the release channel with no tags follows main", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout, origin } = await makeInstallation(parent);
+    await setChannel(checkout, "release");
+    await pushCommit(parent, origin, { NEWS: "new\n" });
+
+    const result = await adhd(checkout, ["update"], parent);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toContain("no release found; following main");
+    expect(existsSync(join(checkout, "NEWS"))).toBe(true);
+  });
+});
+
 test("update moves a release install to the newest tag and reports it", async () => {
   await withTemporaryParent(async (parent) => {
     const { checkout, origin } = await makeInstallation(parent);

@@ -5,7 +5,7 @@
 # shellcheck disable=SC2154  # ADHD_HOME comes from bin/adhd
 
 cmd_update() {
-  local ref='' channel from to tag
+  local ref='' channel from to tag old_sha new_sha
 
   while (( $# > 0 )); do
     case "$1" in
@@ -33,15 +33,20 @@ cmd_update() {
   [[ -n "$ref" ]] || ref=$channel
 
   from=$(adhd_version)
+  old_sha=$(git -C "$ADHD_HOME" rev-parse HEAD 2>/dev/null) || old_sha=''
   git -C "$ADHD_HOME" fetch --quiet --tags --prune origin || die "unable to fetch into $ADHD_HOME"
   move_to_ref "$ADHD_HOME" "$ref" || die "unable to update $ADHD_HOME to $ref"
   git -C "$ADHD_HOME" config adhd.ref "$ref" || die "unable to record adhd.ref in $ADHD_HOME"
   to=$(adhd_version)
+  new_sha=$(git -C "$ADHD_HOME" rev-parse HEAD 2>/dev/null) || new_sha=''
 
-  if [[ "$from" == "$to" ]]; then
+  if [[ "$old_sha" == "$new_sha" ]]; then
     note "project-adhd is already at $to"
-  else
+  elif [[ "$from" != "$to" ]]; then
     note "Updated project-adhd $from → $to"
+  else
+    # Same version string on a different commit (main, or no reachable tag).
+    note "Updated project-adhd $from (${old_sha:0:7}) → $to (${new_sha:0:7})"
   fi
   if tag=$(git -C "$ADHD_HOME" describe --tags --exact-match HEAD 2>/dev/null); then
     printf 'Release notes: %s/tag/%s\n' "$ADHD_RELEASES_URL" "$tag"
