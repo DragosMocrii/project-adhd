@@ -8,6 +8,8 @@ runtime it attaches to other Git repositories.
 - `bin/adhd` — host CLI dispatcher. `libexec/adhd/` — one file per
   subcommand plus `common.sh` (shared helpers and the runtime manifest).
 - `install.sh` — host installer.
+- `VERSION`, `CHANGELOG.md`, `release-please-config.json`,
+  `.release-please-manifest.json` — release metadata, owned by release-please.
 - `.devcontainer/project-adhd/` — **the runtime**: everything `adhd attach`
   copies. This repository dogfoods it in tracked mode.
 - `.devcontainer/project-adhd/lib/` — shared units. `agent-tools.sh` parses
@@ -52,6 +54,21 @@ Commit titles follow [Conventional Commits 1.0.0](https://www.conventionalcommit
 - The description is lowercase, imperative, and has no trailing period.
 - Mark a breaking change with `!` before the colon, or with a
   `BREAKING CHANGE:` footer.
+
+## Releases
+
+release-please (`.github/workflows/release.yml`) keeps a release PR open on
+`main`; merging it tags `vX.Y.Z` and publishes the GitHub Release.
+
+- release-please owns `VERSION`, `CHANGELOG.md`, and
+  `.release-please-manifest.json`. Never edit them or push `v*` tags by hand.
+- Commit types drive the bump. While on 0.x, a breaking change (`!` or
+  `BREAKING CHANGE:`) bumps the minor version; `feat` and `fix` bump the patch.
+- `latest_release_tag` and `move_to_ref` exist in both
+  `libexec/adhd/common.sh` and `install.sh`, which must run standalone. Change
+  both copies together; a contract test asserts they are identical.
+- Installs follow `adhd.ref` in their own Git config: `release`, a branch, a
+  pinned tag, or `checkout` (a development checkout adhd never moves).
 
 ## AGENT_TOOLS
 

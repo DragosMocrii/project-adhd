@@ -26,9 +26,17 @@ only the tools you actually use. `rtk` and `gh` are always installed.
 
 The documented one-liner pipes `install.sh` from this repository's `main`
 branch into `bash`. It clones project-adhd with `git` into
-`~/.local/share/project-adhd` (or fast-forwards an existing clone) and links
-`~/.local/bin/adhd`. It downloads nothing else and needs no `sudo`. To review
-it first, clone the repository and run `./install.sh` from the checkout.
+`~/.local/share/project-adhd` (or fetches into an existing clone), checks out
+the newest release tag (`vX.Y.Z`), and links `~/.local/bin/adhd`. The
+installer script itself always comes from `main`; the code it installs is the
+release. `ADHD_REF=vX.Y.Z` pins a specific release and `ADHD_REF=main`
+installs unreleased code. It downloads nothing else and needs no `sudo`. To
+review it first, clone the repository and run `./install.sh` from the
+checkout.
+
+Releases are tagged by release-please from a GitHub Actions workflow that
+authenticates with a GitHub App restricted to this repository; its actions are
+pinned by commit SHA.
 
 ## Installers are unpinned by design
 

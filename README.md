@@ -8,7 +8,7 @@ project.
 
 **What you get**
 
-- `adhd`, a small host CLI: `attach`, `detach`, `update`, `new`.
+- `adhd`, a small host CLI: `attach`, `detach`, `update`, `new`, `version`.
 - A digest-pinned Dev Container with Bun, Node, `python3`, and the GitHub CLI.
 - Your choice of Claude Code, Codex, Gemini CLI, and OMP — see `AGENT_TOOLS`.
 - RTK configured as a hook for each selected agent.
@@ -26,10 +26,13 @@ repositories. Linux and macOS are supported.
 curl -fsSL https://raw.githubusercontent.com/DragosMocrii/project-adhd/main/install.sh | bash
 ```
 
-This clones project-adhd into `~/.local/share/project-adhd` and links
-`~/.local/bin/adhd`. If `~/.local/bin` is not on your `PATH`, the installer
-prints the line to add. Running it again updates the installation. From a
-checkout of this repository, `./install.sh` links that checkout instead.
+This clones project-adhd into `~/.local/share/project-adhd`, checks out the
+newest release, and links `~/.local/bin/adhd`. If `~/.local/bin` is not on
+your `PATH`, the installer prints the line to add. Running it again updates
+the installation. Set `ADHD_REF=main` to follow unreleased changes, or
+`ADHD_REF=v0.1.0` to pin a release. From a checkout of this repository,
+`./install.sh` links that checkout instead, and `adhd update` leaves it to
+you and git.
 
 ## Attach to a repository
 
@@ -127,9 +130,34 @@ in the volumes. Deleting `.devcontainer/project-adhd/.env` or
 ## Updating and customizing
 
 ```bash
-adhd update              # pull the latest project-adhd
+adhd update              # move to the newest project-adhd release
 adhd attach <dir>        # refresh an attached repository
 ```
+
+### Versions and channels
+
+project-adhd is released as `vX.Y.Z` tags with notes on the
+[releases page](https://github.com/DragosMocrii/project-adhd/releases) and in
+[CHANGELOG.md](CHANGELOG.md). `adhd version` prints what is installed and what
+it follows:
+
+```console
+$ adhd version
+adhd 0.1.0 (release)
+```
+
+```bash
+adhd update --ref v0.1.0   # pin a release; later updates stay there
+adhd update --ref main     # follow main, including unreleased changes
+adhd update --ref release  # back to the newest release
+```
+
+Each attached repository records the version it was refreshed from in
+`.devcontainer/project-adhd/.adhd` (`version=`); in tracked mode that file is
+committed, so the repository's history shows every runtime upgrade.
+
+**Installed before releases existed?** Run `adhd update` twice: the first run
+fetches the new `adhd`, the second moves it to the newest release.
 
 You can edit an attached repository's runtime files — for example add a Dev
 Container Feature for a toolchain to `devcontainer.json`:
