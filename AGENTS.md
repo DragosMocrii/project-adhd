@@ -54,6 +54,14 @@ Commit titles follow [Conventional Commits 1.0.0](https://www.conventionalcommit
 - The description is lowercase, imperative, and has no trailing period.
 - Mark a breaking change with `!` before the colon, or with a
   `BREAKING CHANGE:` footer.
+- The type decides whether a change is released: `feat`, `fix`, `perf`, and
+  `revert` appear in the changelog and trigger a release; `docs`, `test`,
+  `ci`, `chore`, `refactor`, `style`, and `build` do neither. Use `feat` or
+  `fix` for any change a user of `adhd` or the runtime would notice, even a
+  small one.
+- The description becomes the changelog line, so write it for users.
+- A pull request merged by squash contributes only its title, so the PR
+  title must follow these rules too.
 
 ## Releases
 
