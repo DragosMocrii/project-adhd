@@ -826,6 +826,24 @@ test("--version falls back to VERSION when git fails", async () => {
   });
 });
 
+test("attach records the version in the marker and reports a version change", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout, root } = await attached(parent, "versioned");
+    const marker = join(root, RUNTIME, ".adhd");
+    expect(await readFile(marker, "utf8")).toMatch(/^mode=untracked\nsource=[^\n]+\nversion=0\.0\.0\n/);
+
+    await commitFiles(checkout, { VERSION: "0.1.0\n" }, "chore: release 0.1.0", "v0.1.0");
+    const refreshed = await adhd(checkout, ["attach", root], parent);
+
+    expect(refreshed.exitCode).toBe(0);
+    expect(refreshed.stdout).toContain("Refreshed the runtime: 0.0.0 → 0.1.0");
+    expect(await readFile(marker, "utf8")).toMatch(/^version=0\.1\.0$/m);
+
+    const again = await adhd(checkout, ["attach", root], parent);
+    expect(again.stdout).not.toContain("Refreshed the runtime");
+  });
+});
+
 test("usage lists version and update --ref", async () => {
   await withTemporaryParent(async (parent) => {
     const { checkout } = await makeInstallation(parent);

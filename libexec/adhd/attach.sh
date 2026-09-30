@@ -131,9 +131,9 @@ prune_removed() {
   done < "$marker"
 }
 
-# write_marker <runtime> <mode>: refreshes the runtime and records what was written.
+# write_marker <runtime> <mode> <version>: refreshes the runtime and records what was written.
 write_marker() {
-  local runtime=$1 mode=$2 marker="$1/.adhd" body revision
+  local runtime=$1 mode=$2 version=$3 marker="$1/.adhd" body revision
 
   body=$(mktemp "$runtime/.adhd.XXXXXX") || die "unable to create a temporary file in $runtime"
   ATTACH_MARKER_TEMP=$body
@@ -141,6 +141,7 @@ write_marker() {
   {
     printf 'mode=%s\n' "$mode"
     printf 'source=%s\n' "$revision"
+    printf 'version=%s\n' "$version"
     copy_runtime "$runtime" "$marker"
   } > "$body"
   prune_removed "$runtime" "$marker"
@@ -215,7 +216,7 @@ attach_cleanup() {
 }
 
 cmd_attach() {
-  local target='' agents='' agents_given=0 mode=untracked root runtime marker recorded tracked_files
+  local target='' agents='' agents_given=0 mode=untracked root runtime marker recorded tracked_files version previous
 
   while (( $# > 0 )); do
     case "$1" in
@@ -278,6 +279,9 @@ cmd_attach() {
       die "git already tracks files in $ADHD_RUNTIME_REL; use --track"
   fi
 
+  version=$(adhd_version)
+  previous=$(marker_get "$marker" version) || previous=''
+
   choose_agents "$runtime" "$agents" "$agents_given"
   ATTACH_RUNTIME=$runtime
   if [[ ! -e "$runtime" ]]; then
@@ -289,9 +293,12 @@ cmd_attach() {
     # Hide the folder from git before anything is copied into it.
     printf '*\n' > "$runtime/.gitignore"
   fi
-  write_marker "$runtime" "$mode"
+  write_marker "$runtime" "$mode" "$version"
   write_ignore_rules "$root" "$runtime" "$mode"
   write_devcontainer_env "$runtime" "$ATTACH_AGENTS"
   trap - EXIT
+  if [[ -n "$previous" && "$previous" != "$version" ]]; then
+    note "Refreshed the runtime: $previous → $version"
+  fi
   print_next_steps "$root" "$mode"
 }
