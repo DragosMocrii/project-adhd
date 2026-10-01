@@ -196,6 +196,76 @@ write_file() {
     die "unable to install state file $destination"
   fi
 }
+configure_git_identity() {
+  local root=$1 key value status worktree_value local_value label example
+  local worktree_config=false write_scope=--local
+
+  if git -C "$root" config --bool --get extensions.worktreeConfig; then
+    worktree_config=true
+  else
+    status=$?
+    if (( status != 1 )); then
+      die "unable to read repository Git extensions.worktreeConfig"
+    fi
+  fi
+  if [[ "$worktree_config" == true ]]; then
+    write_scope=--worktree
+  fi
+
+  for key in user.name user.email; do
+    if value=$(git -C "$root" config --includes --get "$key"); then
+      :
+    else
+      status=$?
+      if (( status != 1 )); then
+        die "unable to read host Git $key"
+      fi
+      value=
+    fi
+
+    if [[ -z "$value" ]]; then
+      if [[ "$key" == user.name ]]; then
+        label=user.name
+        example="'Your Name'"
+      else
+        label=user.email
+        example="'you@example.com'"
+      fi
+      printf "initialize.sh: warning: host Git %s is unset or empty; configure it with: git config --global %s %s\n" \
+        "$label" "$label" "$example" >&2
+      continue
+    fi
+
+    if [[ "$worktree_config" == true ]]; then
+      if worktree_value=$(git -C "$root" config --worktree --no-includes --get "$key"); then
+        if [[ -n "$worktree_value" ]]; then
+          continue
+        fi
+      else
+        status=$?
+        if (( status != 1 )); then
+          die "unable to read repository Git $key"
+        fi
+      fi
+    fi
+
+    if local_value=$(git -C "$root" config --local --no-includes --get "$key"); then
+      if [[ -n "$local_value" ]]; then
+        continue
+      fi
+    else
+      status=$?
+      if (( status != 1 )); then
+        die "unable to read repository Git $key"
+      fi
+    fi
+
+
+    if ! git -C "$root" config "$write_scope" "$key" "$value"; then
+      die "unable to configure repository Git $key"
+    fi
+  done
+}
 
 state_env=$devcontainer_dir/.env
 canonical_state=$git_common_dir/.agentic-bun-devcontainer-prefix
@@ -265,3 +335,4 @@ if [[ -n "$compose_name_source" ]]; then
   printf "initialize.sh: warning: COMPOSE_PROJECT_NAME is set (%s); the Dev Containers extension may use it instead of this worktree's own Compose project name\n" \
     "$compose_name_source" >&2
 fi
+configure_git_identity "$workspace_root"

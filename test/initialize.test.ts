@@ -2,7 +2,14 @@ import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
-import { checked, hostBash, prepareRepository, run, withTemporaryParent } from "./helpers";
+import { checked, CommandResult, hostBash, prepareRepository, run, withTemporaryParent } from "./helpers";
+
+async function runIdentity(command: string[], cwd: string, env: Record<string, string>): Promise<CommandResult> {
+  return run(
+    ["env", "-i", `PATH=${process.env.PATH!}`, ...Object.entries(env).map(([key, value]) => `${key}=${value}`), ...command],
+    cwd,
+  );
+}
 
 async function runInitializer(root: string): Promise<void> {
   const result = await run([hostBash, join(root, ".devcontainer", "project-adhd", "initialize.sh"), root], root);
@@ -12,6 +19,247 @@ async function runInitializer(root: string): Promise<void> {
     );
   }
 }
+function identityEnvironment(home: string, globalConfig: string): Record<string, string> {
+  return {
+    HOME: home,
+    XDG_CONFIG_HOME: join(home, ".config"),
+    GIT_CONFIG_GLOBAL: globalConfig,
+    GIT_CONFIG_NOSYSTEM: "1",
+  };
+}
+
+async function checkedIdentity(
+  command: string[],
+  cwd: string,
+  env: Record<string, string>,
+): Promise<string> {
+  const result = await runIdentity(command, cwd, env);
+  if (result.exitCode !== 0) {
+    throw new Error(`${command.join(" ")} failed with exit code ${result.exitCode}\n${result.stdout}${result.stderr}`);
+  }
+  return result.stdout;
+}
+
+async function removeFixtureIdentity(root: string, env: Record<string, string>): Promise<void> {
+  await checkedIdentity(["git", "-C", root, "config", "--local", "--unset-all", "user.name"], root, env);
+  await checkedIdentity(["git", "-C", root, "config", "--local", "--unset-all", "user.email"], root, env);
+}
+
+async function initializeWithIdentity(
+  root: string,
+  env: Record<string, string>,
+): Promise<CommandResult> {
+  return runIdentity([hostBash, join(root, ".devcontainer", "project-adhd", "initialize.sh"), root], root, env);
+}
+
+test("pins host-global identity for commits without the host global config", async () => {
+  await withTemporaryParent(async (parent) => {
+    const root = join(parent, "identity");
+    const hostHome = join(parent, "host-home");
+    const containerHome = join(parent, "container-home");
+    const globalConfig = join(parent, "host.gitconfig");
+    await mkdir(root);
+    await mkdir(hostHome);
+    await mkdir(containerHome);
+    await prepareRepository(root);
+    const hostEnv = identityEnvironment(hostHome, globalConfig);
+    await removeFixtureIdentity(root, hostEnv);
+    const name = "Zoë O'Connor $dev \\ Team";
+    const email = "zoe@example.invalid";
+    await writeFile(globalConfig, "");
+    await checkedIdentity(["git", "config", "--file", globalConfig, "user.name", name], root, hostEnv);
+    await checkedIdentity(["git", "config", "--file", globalConfig, "user.email", email], root, hostEnv);
+
+    const initialized = await initializeWithIdentity(root, hostEnv);
+    expect(initialized.exitCode, initialized.stderr).toBe(0);
+    const containerEnv = identityEnvironment(containerHome, "/dev/null");
+    expect((await checkedIdentity(["git", "-C", root, "config", "--worktree", "--get", "user.name"], root, containerEnv)).trim()).toBe(name);
+    expect((await checkedIdentity(["git", "-C", root, "config", "--worktree", "--get", "user.email"], root, containerEnv)).trim()).toBe(email);
+    await checkedIdentity(
+      ["git", "-C", root, "-c", "core.hooksPath=/dev/null", "commit", "--allow-empty", "--message=identity"],
+      root,
+      containerEnv,
+    );
+    expect((await checkedIdentity(["git", "-C", root, "log", "-1", "--format=%an <%ae>%n%cn <%ce>"], root, containerEnv)).trim())
+      .toBe(`${name} <${email}>\n${name} <${email}>`);
+  });
+});
+
+test("pins identity selected by a host conditional include", async () => {
+  await withTemporaryParent(async (parent) => {
+    const root = join(parent, "conditional");
+    const home = join(parent, "host-home");
+    const containerHome = join(parent, "container-home");
+    const globalConfig = join(parent, "host.gitconfig");
+    const includedConfig = join(parent, "included.gitconfig");
+    await mkdir(root);
+    await mkdir(home);
+    await mkdir(containerHome);
+    await prepareRepository(root);
+    const hostEnv = identityEnvironment(home, globalConfig);
+    await removeFixtureIdentity(root, hostEnv);
+    await writeFile(includedConfig, "[user]\n\tname = Conditional Host\n\temail = conditional@example.invalid\n");
+    await writeFile(
+      globalConfig,
+      `[user]\n\tname = Default Host\n\temail = default@example.invalid\n[includeIf "gitdir:${root}/"]\n\tpath = ${includedConfig}\n`,
+    );
+
+    const initialized = await initializeWithIdentity(root, hostEnv);
+    expect(initialized.exitCode).toBe(0);
+    const containerEnv = identityEnvironment(containerHome, "/dev/null");
+    expect((await checkedIdentity(["git", "-C", root, "config", "--worktree", "--get", "user.name"], root, containerEnv)).trim())
+      .toBe("Conditional Host");
+    expect((await checkedIdentity(["git", "-C", root, "config", "--worktree", "--get", "user.email"], root, containerEnv)).trim())
+      .toBe("conditional@example.invalid");
+  });
+});
+
+test("preserves each existing repository identity field and fills the missing field once", async () => {
+  await withTemporaryParent(async (parent) => {
+    const root = join(parent, "preserved-identity");
+    const home = join(parent, "host-home");
+    const globalConfig = join(parent, "host.gitconfig");
+    await mkdir(root);
+    await mkdir(home);
+    await prepareRepository(root);
+    const env = identityEnvironment(home, globalConfig);
+    await removeFixtureIdentity(root, env);
+    await checkedIdentity(["git", "-C", root, "config", "--local", "user.name", "Repository Name"], root, env);
+    await writeFile(globalConfig, "[user]\n\tname = Host Name\n\temail = host@example.invalid\n");
+
+    let initialized = await initializeWithIdentity(root, env);
+    expect(initialized.exitCode).toBe(0);
+    await checkedIdentity(["git", "-C", root, "config", "--local", "user.email", "repository@example.invalid"], root, env);
+    await writeFile(globalConfig, "[user]\n\tname = Changed Host\n\temail = changed@example.invalid\n");
+    initialized = await initializeWithIdentity(root, env);
+    expect(initialized.exitCode).toBe(0);
+    expect((await checkedIdentity(["git", "-C", root, "config", "--local", "--get", "user.name"], root, env)).trim()).toBe("Repository Name");
+    expect((await checkedIdentity(["git", "-C", root, "config", "--local", "--get", "user.email"], root, env)).trim()).toBe("repository@example.invalid");
+  });
+});
+test("preserves an existing repository email while filling a missing name", async () => {
+  await withTemporaryParent(async (parent) => {
+    const root = join(parent, "preserved-email");
+    const home = join(parent, "host-home");
+    const globalConfig = join(parent, "host.gitconfig");
+    await mkdir(root);
+    await mkdir(home);
+    await prepareRepository(root);
+    const env = identityEnvironment(home, globalConfig);
+    await removeFixtureIdentity(root, env);
+    await checkedIdentity(["git", "-C", root, "config", "--local", "user.email", "repository@example.invalid"], root, env);
+    await writeFile(globalConfig, "[user]\n\tname = Host Name\n\temail = host@example.invalid\n");
+
+    const initialized = await initializeWithIdentity(root, env);
+    expect(initialized.exitCode).toBe(0);
+    expect((await checkedIdentity(["git", "-C", root, "config", "--local", "--get", "user.name"], root, env)).trim())
+      .toBe("Host Name");
+    expect((await checkedIdentity(["git", "-C", root, "config", "--local", "--get", "user.email"], root, env)).trim())
+      .toBe("repository@example.invalid");
+  });
+});
+
+test("warns and leaves unavailable or explicitly empty identity fields unset", async () => {
+  await withTemporaryParent(async (parent) => {
+    const root = join(parent, "partial-identity");
+    const home = join(parent, "host-home");
+    const globalConfig = join(parent, "host.gitconfig");
+    await mkdir(root);
+    await mkdir(home);
+    await prepareRepository(root);
+    const env = identityEnvironment(home, globalConfig);
+    await removeFixtureIdentity(root, env);
+    await checkedIdentity(["git", "-C", root, "config", "--local", "user.name", ""], root, env);
+    await writeFile(globalConfig, "[user]\n\temail = available@example.invalid\n");
+
+    const initialized = await initializeWithIdentity(root, env);
+    expect(initialized.exitCode).toBe(0);
+    expect(initialized.stderr).toContain("user.name");
+    expect(initialized.stderr).toContain("git config --global");
+    expect((await checkedIdentity(["git", "-C", root, "config", "--local", "--get", "user.email"], root, env)).trim())
+      .toBe("available@example.invalid");
+    const missingName = await runIdentity(["git", "-C", root, "config", "--local", "--get", "user.name"], root, env);
+    expect(missingName.exitCode).toBe(0);
+    expect(missingName.stdout.trim()).toBe("");
+  });
+});
+test("warns for both fields and succeeds when host identity is unavailable", async () => {
+  await withTemporaryParent(async (parent) => {
+    const root = join(parent, "no-identity");
+    const home = join(parent, "host-home");
+    const globalConfig = join(parent, "missing.gitconfig");
+    await mkdir(root);
+    await mkdir(home);
+    await prepareRepository(root);
+    const env = identityEnvironment(home, globalConfig);
+    await removeFixtureIdentity(root, env);
+
+    const initialized = await initializeWithIdentity(root, env);
+    expect(initialized.exitCode).toBe(0);
+    expect(initialized.stderr).toContain("user.name");
+    expect(initialized.stderr).toContain("user.email");
+    for (const key of ["user.name", "user.email"]) {
+      const result = await runIdentity(["git", "-C", root, "config", "--local", "--get", key], root, env);
+      expect(result.exitCode).toBe(1);
+    }
+  });
+});
+
+test("writes inferred identity to the enabled worktree scope only", async () => {
+  await withTemporaryParent(async (parent) => {
+    const root = join(parent, "worktree-main");
+    const sibling = join(parent, "worktree-sibling");
+    const target = join(parent, "worktree-target");
+    const home = join(parent, "host-home");
+    const globalConfig = join(parent, "host.gitconfig");
+    await mkdir(root);
+    await mkdir(home);
+    await prepareRepository(root);
+    const env = identityEnvironment(home, globalConfig);
+    await removeFixtureIdentity(root, env);
+    await checkedIdentity(["git", "-C", root, "config", "--local", "extensions.worktreeConfig", "true"], root, env);
+    await checkedIdentity(["git", "-C", root, "worktree", "add", sibling, "-b", "feature/sibling"], root, env);
+    await checkedIdentity(["git", "-C", root, "worktree", "add", target, "-b", "feature/target"], root, env);
+    await checkedIdentity(["git", "-C", sibling, "config", "--worktree", "user.name", "Sibling Identity"], sibling, env);
+    await checkedIdentity(["git", "-C", sibling, "config", "--worktree", "user.email", "sibling@example.invalid"], sibling, env);
+    await writeFile(globalConfig, "[user]\n\tname = Target Identity\n\temail = target@example.invalid\n");
+
+    const initialized = await initializeWithIdentity(target, env);
+    expect(initialized.exitCode).toBe(0);
+    expect((await checkedIdentity(["git", "-C", target, "config", "--worktree", "--get", "user.name"], target, env)).trim())
+      .toBe("Target Identity");
+    const commonName = await runIdentity(["git", "-C", target, "config", "--local", "--get", "user.name"], target, env);
+    expect(commonName.exitCode).toBe(1);
+    expect((await checkedIdentity(["git", "-C", sibling, "config", "--worktree", "--get", "user.name"], sibling, env)).trim())
+      .toBe("Sibling Identity");
+  });
+});
+
+test("shares inferred identity through local config when worktree config is disabled", async () => {
+  await withTemporaryParent(async (parent) => {
+    const root = join(parent, "shared-main");
+    const linked = join(parent, "shared-linked");
+    const home = join(parent, "host-home");
+    const globalConfig = join(parent, "host.gitconfig");
+    await mkdir(root);
+    await mkdir(home);
+    await prepareRepository(root);
+    const env = identityEnvironment(home, globalConfig);
+    await removeFixtureIdentity(root, env);
+    await checkedIdentity(["git", "-C", root, "worktree", "add", linked, "-b", "feature/shared"], root, env);
+    await writeFile(globalConfig, "[user]\n\tname = Shared Host\n\temail = shared@example.invalid\n");
+
+    const initialized = await initializeWithIdentity(linked, env);
+    expect(initialized.exitCode).toBe(0);
+    expect((await checkedIdentity(["git", "-C", root, "config", "--local", "--get", "user.name"], root, env)).trim())
+      .toBe("Shared Host");
+    expect((await checkedIdentity(["git", "-C", linked, "config", "--local", "--get", "user.email"], linked, env)).trim())
+      .toBe("shared@example.invalid");
+    const mainInitialized = await initializeWithIdentity(root, env);
+    expect(mainInitialized.exitCode).toBe(0);
+    expect(await readStatePrefix(linked)).toBe(await readStatePrefix(root));
+  });
+});
 
 const STATE_KEYS = ["PROJECT_STATE_PREFIX", "COMPOSE_INSTANCE", "AGENT_STATE_PREFIX", "WORKSPACE_NAME"];
 

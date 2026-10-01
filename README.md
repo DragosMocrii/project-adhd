@@ -45,6 +45,15 @@ Then open the repository in VS Code and run **Dev Containers: Reopen in
 Container**. If the repository ships its own `.devcontainer/`, VS Code asks
 which configuration to open; pick `project-adhd`.
 
+During the host-side initialization, project-adhd copies missing Git
+`user.name` and `user.email` from the repository's effective host Git
+configuration into repository-local configuration. Existing repository or
+worktree values are preserved. This is a one-time fill: later changes to the
+host identity do not replace the repository values. If either host value is
+unset or empty, initialization warns and continues; configure it on the host
+with `git config --global user.name 'Your Name'` or
+`git config --global user.email 'you@example.com'`.
+
 The first time on a host, authenticate inside the container, then finish
 setup:
 
