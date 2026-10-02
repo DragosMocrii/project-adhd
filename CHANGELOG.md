@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/DragosMocrii/project-adhd/compare/v0.1.1...v0.1.2) (2026-10-02)
+
+
+### Features
+
+* **readme:** add centered mascot image ([73f1c57](https://github.com/DragosMocrii/project-adhd/commit/73f1c57db7392368d7b32cb0f74ebf5991618b7c))
+
 ## [0.1.1](https://github.com/DragosMocrii/project-adhd/compare/v0.1.0...v0.1.1) (2026-10-01)
 
 
