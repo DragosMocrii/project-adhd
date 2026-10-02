@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/DragosMocrii/project-adhd/compare/v0.1.0...v0.1.1) (2026-10-01)
+
+
+### Features
+
+* **initialize:** infer Git identity from host config ([cf93961](https://github.com/DragosMocrii/project-adhd/commit/cf93961e19bdc43d463b98c74465b775ee8b8b00))
+
 ## 0.1.0 (2026-09-30)
 
 
