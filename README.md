@@ -1,5 +1,9 @@
 # project-adhd
 
+<p align="center">
+  <img src="assets/mascot.jpg" alt="project-adhd mascot" width="180">
+</p>
+
 An agentic Dev Container you attach to any Git repository. It installs your
 choice of agent CLIs, wires them to the RTK token-optimizing proxy and the
 Superpowers plugin, and keeps logins and plugins in Docker volumes shared by
