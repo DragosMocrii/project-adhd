@@ -207,6 +207,18 @@ See [SECURITY.md](SECURITY.md) before using this with code you do not trust.
 
 ## FAQ
 
+### Can I add project-adhd to an existing Git repository?
+
+Yes. That was one of the project's main goals. Run `adhd attach` with the
+path to your existing clone, for example `adhd attach ~/src/my-project`.
+See [Attach to a repository](#attach-to-a-repository) for details.
+
+### Can I quickly scaffold a new repository?
+
+Yes. Run `adhd new my-project` to create the repository locally and on GitHub.
+It creates a private GitHub repository by default; add `--public` to make it
+public. See [Start a new project](#start-a-new-project) for details.
+
 ### How do I get a new project up and running with the tools it needs?
 
 Use an agentic tool in the Dev Container to analyze the repository, identify
