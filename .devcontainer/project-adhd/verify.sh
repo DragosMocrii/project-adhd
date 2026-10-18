@@ -26,6 +26,10 @@ record_skip() {
   printf 'verify: SKIP %s\n' "$1"
 }
 
+warn() {
+  printf 'verify: WARN %s\n' "$*"
+}
+
 fail() {
   printf 'verify: %s\n' "$*" >&2
   exit 1
@@ -185,6 +189,37 @@ check_archify() {
   done
 }
 
+# Host PulseAudio socket that docker-compose.yml binds for Herdr sound
+# notifications. Overridable for tests only.
+HERDR_PULSE_SOCKET="${HERDR_PULSE_SOCKET:-/run/host/pulse/native}"
+
+check_herdr_audio() {
+  local player
+
+  for player in paplay pw-play ffplay mpg123 mpv; do
+    if command -v "$player" >/dev/null 2>&1; then
+      break
+    fi
+    player=''
+  done
+  if [[ -z "$player" ]]; then
+    fail 'no Herdr audio player is on PATH (paplay, pw-play, ffplay, mpg123, or mpv)'
+  fi
+
+  if [[ ! -S "$HERDR_PULSE_SOCKET" ]]; then
+    warn "Herdr sound notifications are unavailable: no host PulseAudio socket at $HERDR_PULSE_SOCKET (Linux hosts only; rebuild after starting the audio server)"
+  fi
+}
+
+# Path to the sshd that `adhd herdr` runs. Overridable for tests only.
+HERDR_SSHD="${HERDR_SSHD:-/usr/sbin/sshd}"
+
+check_herdr_remote_server() {
+  if [[ ! -x "$HERDR_SSHD" ]]; then
+    fail "sshd for adhd herdr is missing: $HERDR_SSHD"
+  fi
+}
+
 check_rtk() {
   if ! rtk gain >/dev/null 2>&1; then
     fail 'rtk gain failed; verify that rtk-ai/rtk is installed rather than the Rust Type Kit collision'
@@ -198,7 +233,7 @@ main() {
   agent_tools_init
   printf 'verify: selected agent tools: %s\n' "$(agent_tools_summary)"
 
-  for command_name in bun node python3 gh rtk; do
+  for command_name in bun node python3 gh rtk herdr; do
     require_command "$command_name"
     record_pass
   done
@@ -248,6 +283,10 @@ main() {
     record_skip 'Archify skill check (no selected tool has an archify destination)'
   fi
   check_rtk
+  record_pass
+  check_herdr_audio
+  record_pass
+  check_herdr_remote_server
   record_pass
 
   if (( ${#unselected[@]} > 0 )); then

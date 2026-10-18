@@ -1,0 +1,14 @@
+#!/bin/sh
+# ssh as `adhd herdr` runs Herdr: a connection to $ADHD_HERDR_TARGET reaches the
+# Dev Container through docker exec. Every other connection is plain ssh.
+# Host code: POSIX sh with BSD or GNU userland.
+set -eu
+
+for argument in "$@"; do
+  if [ "$argument" = "$ADHD_HERDR_TARGET" ]; then
+    # shellcheck source=libexec/adhd/herdr-bin/options.sh
+    . "${0%/*}/options.sh"
+    break
+  fi
+done
+exec "$ADHD_HERDR_SSH" "$@"

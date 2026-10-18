@@ -14,6 +14,10 @@ const HOST_SCRIPTS = [
   "libexec/adhd/update.sh",
   "libexec/adhd/version.sh",
   "libexec/adhd/new.sh",
+  "libexec/adhd/herdr.sh",
+  "libexec/adhd/herdr-bin/ssh",
+  "libexec/adhd/herdr-bin/scp",
+  "libexec/adhd/herdr-bin/options.sh",
   ".devcontainer/project-adhd/initialize.sh",
   ".devcontainer/project-adhd/lib/agent-tools.sh",
 ];

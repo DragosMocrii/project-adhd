@@ -267,11 +267,38 @@ configure_git_identity() {
   done
 }
 
+# host_pulse_dir: prints the host PulseAudio directory to bind for Herdr sound
+# notifications, or nothing when this host has none to share. Only a native
+# Docker Engine on this Linux machine can bind it: Docker Desktop (macOS, or
+# Linux, where it runs a VM) and remote daemons cannot see $XDG_RUNTIME_DIR,
+# and with create_host_path: false the bind would fail container creation.
+# The value goes unquoted into Compose's .env.
+host_pulse_dir() {
+  local directory=${XDG_RUNTIME_DIR-}/pulse engine
+
+  [[ "$(uname -s)" == Linux && -n "${XDG_RUNTIME_DIR-}" ]] || return 0
+  [[ -S "$directory/native" ]] || return 0
+  case "$directory" in
+    *'$'*|*'"'*|*"'"*|*\\*|*' #'*|*$'\n'*) return 0 ;;
+  esac
+  engine=$(docker info --format '{{.OperatingSystem}}|{{.Name}}' 2>/dev/null) || return 0
+  case "$engine" in
+    *'Docker Desktop'*) return 0 ;;
+    *"|$(uname -n)") ;;
+    *) return 0 ;;
+  esac
+  printf '%s' "$directory"
+}
+
 state_env=$devcontainer_dir/.env
 canonical_state=$git_common_dir/.agentic-bun-devcontainer-prefix
 read_valid_prefix "$canonical_state"
 canonical_prefix=$READ_PREFIX
-read_valid_prefix "$state_env" COMPOSE_INSTANCE AGENT_STATE_PREFIX WORKSPACE_NAME
+read_valid_prefix "$state_env" COMPOSE_INSTANCE AGENT_STATE_PREFIX WORKSPACE_NAME HOST_PULSE_DIR
+if [[ -z "$READ_PREFIX" ]]; then
+  # Written before HOST_PULSE_DIR existed.
+  read_valid_prefix "$state_env" COMPOSE_INSTANCE AGENT_STATE_PREFIX WORKSPACE_NAME
+fi
 worktree_prefix=$READ_PREFIX
 
 if [[ -n "$canonical_prefix" && -n "$worktree_prefix" && "$canonical_prefix" != "$worktree_prefix" ]]; then
@@ -314,6 +341,7 @@ write_file "$state_env" "PROJECT_STATE_PREFIX=$SELECTED_PREFIX
 COMPOSE_INSTANCE=$SELECTED_PREFIX-$worktree_id
 AGENT_STATE_PREFIX=$agent_state_prefix
 WORKSPACE_NAME=$workspace_name
+HOST_PULSE_DIR=$(host_pulse_dir)
 "
 
 # The Dev Containers tooling may take the Compose project name from

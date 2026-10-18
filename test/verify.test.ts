@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
+import { createServer } from "node:net";
 import { join } from "node:path";
 import {
   type CommandResult,
@@ -50,6 +51,7 @@ async function runVerify(
   parent: string,
   stubs: Record<string, string>,
   agentTools: string,
+  env: Record<string, string> = {},
 ): Promise<CommandResult> {
   const home = join(parent, "home");
   const stubBin = join(home, ".local", "bin");
@@ -61,15 +63,31 @@ async function runVerify(
     CLAUDE_CONFIG_DIR: join(home, ".claude"),
     AGENT_TOOLS: agentTools,
     PATH: stubBin,
+    HERDR_PULSE_SOCKET: join(parent, "no-pulse-socket"),
+    HERDR_SSHD: "/bin/sh",
+    ...env,
   });
 }
+
+const noop = "#!/bin/sh\nexit 0\n";
+const baseStubs: Record<string, string> = {
+  bun: noop,
+  node: noop,
+  python3: noop,
+  gh: noop,
+  rtk: noop,
+  herdr: noop,
+  mpv: noop,
+  gemini: noop,
+  tr: trStub,
+};
 
 test("verify skips checks for unselected tools and succeeds", async () => {
   await withTemporaryParent(async (parent) => {
     const noop = "#!/bin/sh\nexit 0\n";
     const result = await runVerify(
       parent,
-      { bun: noop, node: noop, python3: noop, gh: noop, rtk: noop, gemini: noop, tr: trStub },
+      { bun: noop, node: noop, python3: noop, gh: noop, rtk: noop, herdr: noop, mpv: noop, gemini: noop, tr: trStub },
       "gemini",
     );
 
@@ -85,11 +103,70 @@ test("verify fails when a selected tool is missing from PATH", async () => {
     const noop = "#!/bin/sh\nexit 0\n";
     const result = await runVerify(
       parent,
-      { bun: noop, node: noop, python3: noop, gh: noop, rtk: noop, tr: trStub },
+      { bun: noop, node: noop, python3: noop, gh: noop, rtk: noop, herdr: noop, mpv: noop, tr: trStub },
       "codex",
     );
 
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toContain("required command is not on PATH: codex");
+  });
+});
+
+test("verify fails when herdr is missing from PATH", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { herdr: _herdr, ...stubs } = baseStubs;
+    const result = await runVerify(parent, stubs, "gemini");
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("required command is not on PATH: herdr");
+  });
+});
+
+test("verify fails when no Herdr audio player is installed", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { mpv: _mpv, ...stubs } = baseStubs;
+    const result = await runVerify(parent, stubs, "gemini");
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("no Herdr audio player is on PATH");
+  });
+});
+
+test("verify warns, without failing, when the host PulseAudio socket is absent", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { mpv: _mpv, ...stubs } = baseStubs;
+    const result = await runVerify(parent, { ...stubs, paplay: noop }, "gemini");
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("verify: WARN Herdr sound notifications are unavailable");
+  });
+});
+
+test("verify does not warn when the host PulseAudio socket is mounted", async () => {
+  await withTemporaryParent(async (parent) => {
+    const socketPath = join(parent, "native");
+    const server = createServer();
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(socketPath, resolve);
+    });
+    try {
+      const result = await runVerify(parent, baseStubs, "gemini", { HERDR_PULSE_SOCKET: socketPath });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).not.toContain("WARN");
+    } finally {
+      server.close();
+    }
+  });
+});
+
+test("verify fails when the sshd for adhd herdr is missing", async () => {
+  await withTemporaryParent(async (parent) => {
+    const sshd = join(parent, "missing-sshd");
+    const result = await runVerify(parent, baseStubs, "gemini", { HERDR_SSHD: sshd });
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain(`sshd for adhd herdr is missing: ${sshd}`);
   });
 });

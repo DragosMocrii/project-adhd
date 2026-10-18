@@ -43,6 +43,7 @@ jobs:
           bun test
           test/initialize.test.ts
           test/adhd.test.ts
+          test/herdr.test.ts
           test/install.test.ts
           test/agent-tools.test.ts
           test/portability.test.ts
@@ -58,5 +59,6 @@ jobs:
             install.sh \
             bin/adhd \
             libexec/adhd/*.sh \
+            libexec/adhd/herdr-bin/* \
             .devcontainer/project-adhd/*.sh \
             .devcontainer/project-adhd/lib/agent-tools.sh

@@ -883,5 +883,6 @@ test("usage lists version and update --ref", async () => {
 
     expect(result.stdout).toContain("  version\n");
     expect(result.stdout).toContain("  update [--ref <release|branch|tag>]\n");
+    expect(result.stdout).toContain("  herdr [dir] [-- <herdr arguments>]\n");
   });
 });

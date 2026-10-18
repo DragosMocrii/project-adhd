@@ -33,6 +33,7 @@ commands:
   detach [dir]
   update [--ref <release|branch|tag>]
   new <name> [--public] [--agents <list>]
+  herdr [dir] [-- <herdr arguments>]
   version
 EOF
 }
@@ -41,7 +42,7 @@ main() {
   local command=${1-}
 
   case "$command" in
-    attach|detach|update|new|version)
+    attach|detach|update|new|herdr|version)
       shift
       # shellcheck disable=SC1090
       source "$ADHD_HOME/libexec/adhd/$command.sh"

@@ -39,6 +39,8 @@ readonly -a INSTALLER_ROOTS=(
 readonly POST_CREATE_LOCK_FILE="$HOME/.local/state/project-adhd/post-create.lock"
 # Seconds to wait for another container's setup. Overridable for tests only.
 POST_CREATE_LOCK_TIMEOUT="${POST_CREATE_LOCK_TIMEOUT:-600}"
+# The sshd that `adhd herdr` runs. Overridable for tests only.
+HERDR_SSHD="${HERDR_SSHD:-/usr/sbin/sshd}"
 
 die() {
   printf 'post-create: %s\n' "$*" >&2
@@ -104,6 +106,37 @@ trust_omp_dependencies() {
   esac
 }
 
+install_herdr_audio_player() {
+  local player
+
+  for player in paplay pw-play ffplay mpg123 mpv; do
+    if command -v "$player" >/dev/null 2>&1; then
+      echo "==> Herdr audio player $player is already installed"
+      return
+    fi
+  done
+
+  echo '==> Installing mpv for Herdr sound notifications'
+  sudo apt-get update
+  sudo apt-get install -y --no-install-recommends mpv
+  sudo rm -rf /var/lib/apt/lists/*
+}
+
+# sshd for `adhd herdr`, which runs it on stdin/stdout through docker exec so a
+# Herdr client on the host can attach. The base image's policy-rc.d keeps the
+# package from starting a daemon, and no port is published.
+install_herdr_remote_server() {
+  if [[ -x "$HERDR_SSHD" ]]; then
+    echo '==> sshd for adhd herdr is already installed'
+    return
+  fi
+
+  echo '==> Installing sshd for adhd herdr'
+  sudo apt-get update
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends openssh-server
+  sudo rm -rf /var/lib/apt/lists/*
+}
+
 install_tools() {
   if agent_tool_selected claude; then
     if command -v claude >/dev/null 2>&1; then
@@ -138,6 +171,17 @@ install_tools() {
       npm install -g --allow-scripts=@github/keytar @google/gemini-cli
     fi
   fi
+
+  # Herdr is not an agent CLI, so AGENT_TOOLS does not gate it.
+  if command -v herdr >/dev/null 2>&1; then
+    echo '==> Herdr is already installed; skipping Herdr installer'
+  else
+    echo '==> Installing Herdr'
+    curl -fsSL https://herdr.dev/install.sh | sh
+  fi
+
+  install_herdr_audio_player
+  install_herdr_remote_server
 
   if agent_tool_selected omp; then
     if command -v omp >/dev/null 2>&1; then

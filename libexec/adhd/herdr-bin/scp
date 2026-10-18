@@ -1,0 +1,17 @@
+#!/bin/sh
+# scp as `adhd herdr` runs Herdr, which copies its binary into the container
+# when the versions differ. scp runs ssh by absolute path, not from PATH, so it
+# needs the same options as libexec/adhd/herdr-bin/ssh.
+# Host code: POSIX sh with BSD or GNU userland.
+set -eu
+
+for argument in "$@"; do
+  case "$argument" in
+    "$ADHD_HERDR_TARGET":*)
+      # shellcheck source=libexec/adhd/herdr-bin/options.sh
+      . "${0%/*}/options.sh"
+      break
+      ;;
+  esac
+done
+exec "$ADHD_HERDR_SCP" "$@"
