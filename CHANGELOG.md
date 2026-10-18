@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/DragosMocrii/project-adhd/compare/v0.1.3...v0.1.4) (2026-10-18)
+
+
+### Features
+
+* **devcontainer:** add lifecycle commands ([#8](https://github.com/DragosMocrii/project-adhd/issues/8)) ([a6c3783](https://github.com/DragosMocrii/project-adhd/commit/a6c37839f1073d1acf634108d21088271665bf45))
+
 ## [0.1.3](https://github.com/DragosMocrii/project-adhd/compare/v0.1.2...v0.1.3) (2026-10-18)
 
 
