@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { createServer, type Server } from "node:net";
 import { isAbsolute, join } from "node:path";
 import { checked, CommandResult, hostBash, prepareRepository, run, withTemporaryParent } from "./helpers";
 
@@ -11,8 +12,8 @@ async function runIdentity(command: string[], cwd: string, env: Record<string, s
   );
 }
 
-async function runInitializer(root: string): Promise<void> {
-  const result = await run([hostBash, join(root, ".devcontainer", "project-adhd", "initialize.sh"), root], root);
+async function runInitializer(root: string, env?: Record<string, string>): Promise<void> {
+  const result = await run([hostBash, join(root, ".devcontainer", "project-adhd", "initialize.sh"), root], root, env);
   if (result.exitCode !== 0) {
     throw new Error(
       `initializer failed with exit code ${result.exitCode}\n${result.stdout}${result.stderr}`,
@@ -261,7 +262,7 @@ test("shares inferred identity through local config when worktree config is disa
   });
 });
 
-const STATE_KEYS = ["PROJECT_STATE_PREFIX", "COMPOSE_INSTANCE", "AGENT_STATE_PREFIX", "WORKSPACE_NAME"];
+const STATE_KEYS = ["PROJECT_STATE_PREFIX", "COMPOSE_INSTANCE", "AGENT_STATE_PREFIX", "WORKSPACE_NAME", "HOST_PULSE_DIR"];
 
 async function readState(root: string): Promise<Record<string, string>> {
   const contents = await readFile(join(root, ".devcontainer", "project-adhd", ".env"), "utf8");
@@ -375,6 +376,7 @@ test("rejects a valid prefix followed by an unterminated extra state line", asyn
       "PROJECT_STATE_PREFIX=malformed-state-1234abcd\nCOMPOSE_INSTANCE=x\nAGENT_STATE_PREFIX=y\nWORKSPACE_NAME=z",
       "PROJECT_STATE_PREFIX=malformed-state-1234abcd\n",
       "PROJECT_STATE_PREFIX=malformed-state-1234abcd\nWORKSPACE_NAME=z\nAGENT_STATE_PREFIX=y\nCOMPOSE_INSTANCE=x\n",
+      "PROJECT_STATE_PREFIX=malformed-state-1234abcd\nCOMPOSE_INSTANCE=x\nAGENT_STATE_PREFIX=y\nWORKSPACE_NAME=z\nHOST_PULSE_DIR=",
     ]) {
       await writeFile(statePath, malformed);
       await runInitializer(root);
@@ -408,6 +410,7 @@ test("separates independent repositories with the same basename", async () => {
   });
 });
 
+// The fixture is the four-key layout written before HOST_PULSE_DIR existed.
 test("preserves a valid state prefix and an existing devcontainer secret on reruns", async () => {
   await withTemporaryParent(async (parent) => {
     const root = join(parent, "preserved-state");
@@ -431,7 +434,7 @@ test("preserves a valid state prefix and an existing devcontainer secret on reru
   });
 });
 
-test("writes four state keys: per-worktree Compose instance, shared agent prefix, raw workspace name", async () => {
+test("writes the state keys: per-worktree Compose instance, shared agent prefix, raw workspace name", async () => {
   await withTemporaryParent(async (parent) => {
     const root = join(parent, "My Project");
     await mkdir(root);
@@ -443,6 +446,66 @@ test("writes four state keys: per-worktree Compose instance, shared agent prefix
     expect(state.COMPOSE_INSTANCE).toBe(`${state.PROJECT_STATE_PREFIX}-${shortHash(await realpath(root))}`);
     expect(state.AGENT_STATE_PREFIX).toBe("project-adhd-shared");
     expect(state.WORKSPACE_NAME).toBe("My Project");
+  });
+});
+
+async function listenOnSocket(path: string): Promise<Server> {
+  const server = createServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(path, resolve);
+  });
+  return server;
+}
+
+test("records the host PulseAudio directory only when its socket exists on Linux", async () => {
+  await withTemporaryParent(async (parent) => {
+    const root = join(parent, "audio");
+    const runtimeDirectory = join(parent, "xdg");
+    const socketPath = join(runtimeDirectory, "pulse", "native");
+    await mkdir(root);
+    await mkdir(join(runtimeDirectory, "pulse"), { recursive: true });
+    await prepareRepository(root);
+
+    await runInitializer(root, { XDG_RUNTIME_DIR: runtimeDirectory });
+    expect((await readState(root)).HOST_PULSE_DIR).toBe("");
+
+    await runInitializer(root, { XDG_RUNTIME_DIR: "" });
+    expect((await readState(root)).HOST_PULSE_DIR).toBe("");
+
+    // A regular file is not an audio server.
+    await writeFile(socketPath, "");
+    await runInitializer(root, { XDG_RUNTIME_DIR: runtimeDirectory });
+    expect((await readState(root)).HOST_PULSE_DIR).toBe("");
+    await rm(socketPath);
+
+    const stubBin = join(parent, "bin");
+    await mkdir(stubBin);
+    const withEngine = async (engine: string | null): Promise<string> => {
+      const docker = engine === null
+        ? "#!/bin/sh\necho 'Cannot connect to the Docker daemon' >&2\nexit 1\n"
+        : `#!/bin/sh\nprintf '%s\\n' ${JSON.stringify(engine)}\n`;
+      await writeFile(join(stubBin, "docker"), docker, { mode: 0o755 });
+      await runInitializer(root, {
+        XDG_RUNTIME_DIR: runtimeDirectory,
+        PATH: `${stubBin}:${process.env.PATH ?? ""}`,
+      });
+      return (await readState(root)).HOST_PULSE_DIR;
+    };
+    const hostname = (await checked(["uname", "-n"], root)).trim();
+
+    const server = await listenOnSocket(socketPath);
+    try {
+      const expected = process.platform === "linux" ? join(runtimeDirectory, "pulse") : "";
+      expect(await withEngine(`Ubuntu 24.04.3 LTS|${hostname}`)).toBe(expected);
+      // Docker Desktop for Linux runs a VM that cannot see $XDG_RUNTIME_DIR.
+      expect(await withEngine("Docker Desktop|docker-desktop")).toBe("");
+      // A remote daemon names another machine.
+      expect(await withEngine(`Ubuntu 24.04.3 LTS|not-${hostname}`)).toBe("");
+      expect(await withEngine(null)).toBe("");
+    } finally {
+      server.close();
+    }
   });
 });
 

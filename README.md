@@ -12,10 +12,14 @@ project.
 
 **What you get**
 
-- `adhd`, a small host CLI: `attach`, `detach`, `update`, `new`, `version`.
+- `adhd`, a small host CLI: `attach`, `detach`, `update`, `new`, `herdr`,
+  `version`.
 - A digest-pinned Dev Container with Bun, Node, `python3`, and the GitHub CLI.
 - Your choice of Claude Code, Codex, Gemini CLI, and OMP — see `AGENT_TOOLS`.
 - RTK configured as a hook for each selected agent.
+- [Herdr](https://herdr.dev), with sound notifications on the host: through
+  its audio server on Linux, or with `adhd herdr` anywhere — see
+  [Herdr sound](#herdr-sound).
 - The Superpowers plugin and the Archify skill installed per agent.
 - One container per repository (and per worktree); several can run at once.
 - Nothing committed to the repository you attach to.
@@ -107,14 +111,64 @@ AGENT_TOOLS=claude          # Claude Code only
 AGENT_TOOLS=claude,codex    # Claude Code and Codex
 ```
 
-Empty selects all four; an unrecognized value fails the run. `rtk` and the
-GitHub CLI are always installed. Changing it later requires **Dev Containers:
+Empty selects all four; an unrecognized value fails the run. `rtk`, the
+GitHub CLI, and Herdr are always installed. Changing it later requires **Dev Containers:
 Rebuild Container**, then `bash .devcontainer/project-adhd/post-create.sh`.
 
 - **OMP Superpowers requires Claude.** OMP sources the Superpowers package from
   Claude's installed plugin, so `omp` needs `claude` selected and
   authenticated; otherwise its Superpowers step is skipped with a message.
 - **Gemini CLI has no RTK integration** and no Archify destination.
+
+## Herdr sound
+
+There are two ways to hear Herdr's notifications on the host.
+
+### `adhd herdr`: a Herdr client on the host (macOS, Windows, Linux)
+
+Herdr is a server, which runs your panes, and clients that draw it. Sounds and
+system notifications play wherever the client runs. `adhd herdr` runs the
+client on your host and attaches it to the Herdr server in the repository's
+running Dev Container:
+
+```bash
+adhd herdr                       # the repository in the current directory
+adhd herdr ~/src/my-project      # or name it
+adhd herdr . -- --session work   # arguments after -- go to herdr
+```
+
+Install Herdr on the host first (`curl -fsSL https://herdr.dev/install.sh | sh`),
+then open the repository in its Dev Container. On macOS the sound plays with
+`afplay`; set `[ui.toast] delivery = "system"` in the host's Herdr config for
+Notification Center alerts too.
+
+It uses Herdr's own `herdr --remote` over SSH, but nothing listens on a port:
+`adhd herdr` gives Herdr `ssh` and `scp` wrappers whose connection to the
+container is `docker exec` running sshd on stdin and stdout. The first run
+creates a dedicated key in `~/.local/state/project-adhd/herdr-remote/`, which is
+the only key that sshd accepts. Your own `~/.ssh/config` and keys are not
+touched, and Herdr's other SSH machines still use plain `ssh`. Panes started
+this way get the container's environment and `PATH`, the same as a VS Code
+terminal, and they share one Herdr server with the container's terminals.
+
+### Host audio on Linux
+
+Herdr plays its notification sounds with `paplay`, `pw-play`, `ffplay`,
+`mpg123`, or `mpv`; `post-create.sh` installs `mpv` when none is present.
+The sound reaches you only on a **Linux host with a native Docker Engine**
+and PulseAudio or PipeWire (`pipewire-pulse`): `initialize.sh` looks for the
+socket at `$XDG_RUNTIME_DIR/pulse/native`, and when it finds one and
+`docker info` reports a non-Desktop engine on the same machine, the container
+binds that directory at `/run/host/pulse` with `PULSE_SERVER` pointing at it.
+
+Everywhere else (macOS, Docker Desktop for Linux, whose VM cannot see the
+socket, a remote Docker daemon, or a Linux host without an audio server) the
+container is still created. Herdr just runs silently in the container (use
+`adhd herdr` instead), and `verify.sh` prints a `WARN` instead of failing. If
+you start the audio server later, run **Dev Containers: Rebuild Container** so
+`initialize.sh` finds it. The host socket also has to accept the
+container's user: PipeWire does by default, and PulseAudio does when the host
+user's UID matches the container's `vscode` user (normally 1000).
 
 ## State and isolation
 
@@ -242,5 +296,5 @@ configuration changed.
 bun install
 bun test
 bun run typecheck
-shellcheck install.sh bin/adhd libexec/adhd/*.sh .devcontainer/project-adhd/*.sh .devcontainer/project-adhd/lib/agent-tools.sh
+shellcheck install.sh bin/adhd libexec/adhd/*.sh libexec/adhd/herdr-bin/* .devcontainer/project-adhd/*.sh .devcontainer/project-adhd/lib/agent-tools.sh
 ```

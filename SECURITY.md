@@ -18,9 +18,39 @@ and on every manual rerun. It fetches and executes the following, as the
 | Gemini CLI | npm registry (`@google/gemini-cli`) | `npm install -g` |
 | OMP | npm registry (`@oh-my-pi/pi-coding-agent`) | `bun install -g` |
 | Archify skill | `bunx skills@latest add tt-a1i/archify` | `bunx` |
+| Herdr installer | `https://herdr.dev/install.sh` | `curl \| sh` |
+| mpv, if no audio player is present | the base image's apt sources | `sudo apt-get install` |
+| openssh-server, for `adhd herdr` | the base image's apt sources | `sudo apt-get install` |
 
 Set `AGENT_TOOLS` in `.devcontainer/project-adhd/devcontainer.env` to install
-only the tools you actually use. `rtk` and `gh` are always installed.
+only the tools you actually use. `rtk`, `gh`, and Herdr are always installed.
+
+On a Linux host with a PulseAudio or PipeWire socket, the container binds the
+host's `$XDG_RUNTIME_DIR/pulse` directory so Herdr can play sounds. Processes in
+the container can then play audio on the host, and with PulseAudio's
+`module-native-protocol-unix` can do anything else that protocol allows, such
+as recording from the host's microphone.
+
+## What adhd herdr does
+
+`adhd herdr` attaches a Herdr client on the host to the container over SSH.
+It publishes no port, and no SSH daemon runs in the container between
+connections. On each run it:
+
+- runs a script as root in the container (`libexec/adhd/herdr-bin/prepare.sh`,
+  through `docker exec -u root`). The script writes
+  `/etc/project-adhd/herdr_sshd_config` and authorizes one dedicated key,
+  created on the host in `~/.local/state/project-adhd/herdr-remote/`. The
+  configuration allows only that key, for the `vscode` user; root login and
+  passwords are refused.
+- starts Herdr with `ssh` and `scp` wrappers. A connection to the container
+  runs `docker exec -i -u root <container> /usr/sbin/sshd -i` as its
+  `ProxyCommand`.
+
+It does not check the container's SSH host key. The connection is a local
+`docker exec`, and anyone able to run it already controls the container; the
+host keys also change on every rebuild. The trust boundary is your Docker
+access, the same as for VS Code.
 
 ## What install.sh does
 

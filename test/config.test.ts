@@ -53,37 +53,54 @@ test("ignores local state files inside the runtime folder only", async () => {
   });
 });
 
+type ComposeMount = {
+  source?: string;
+  target?: string;
+  type?: string;
+  bind?: { create_host_path?: boolean };
+};
+type ComposeConfig = {
+  name?: string;
+  services?: Record<string, {
+    environment?: Record<string, string>;
+    ports?: unknown[];
+    volumes?: ComposeMount[];
+  }>;
+  volumes?: Record<string, { name?: string }>;
+};
+
+const BASE_STATE =
+  "PROJECT_STATE_PREFIX=my-project-1234abcd\n" +
+  "COMPOSE_INSTANCE=my-project-1234abcd-9f9f9f9f\n" +
+  "AGENT_STATE_PREFIX=project-adhd-shared\n" +
+  "WORKSPACE_NAME=My Project\n";
+
+// renderCompose writes .env with <state> under <root>, which Compose reads from
+// the runtime folder, and returns the rendered configuration.
+async function renderCompose(root: string, state: string): Promise<ComposeConfig> {
+  const runtime = join(root, ".devcontainer", "project-adhd");
+  await mkdir(runtime, { recursive: true });
+  await copyFile(composePath, join(runtime, "docker-compose.yml"));
+  await writeFile(join(runtime, "devcontainer.env"), "");
+  await writeFile(join(runtime, ".env"), state);
+  const result = await run(
+    ["docker", "compose", "-f", ".devcontainer/project-adhd/docker-compose.yml", "config", "--format", "json"],
+    root,
+  );
+  if (result.exitCode !== 0) {
+    throw new Error(`docker compose config failed:\n${result.stdout}${result.stderr}`);
+  }
+  return JSON.parse(result.stdout) as ComposeConfig;
+}
+
+function pulseMount(config: ComposeConfig): ComposeMount | undefined {
+  return config.services?.workspace?.volumes?.find((mount) => mount.target === "/run/host/pulse");
+}
+
 test("renders a per-worktree Compose project with shared agent volumes read from .env", async () => {
   await withTemporaryParent(async (parent) => {
     const root = join(parent, "My Project");
-    const runtime = join(root, ".devcontainer", "project-adhd");
-    await mkdir(runtime, { recursive: true });
-    await copyFile(composePath, join(runtime, "docker-compose.yml"));
-    await writeFile(join(runtime, "devcontainer.env"), "");
-    await writeFile(
-      join(runtime, ".env"),
-      "PROJECT_STATE_PREFIX=my-project-1234abcd\n" +
-        "COMPOSE_INSTANCE=my-project-1234abcd-9f9f9f9f\n" +
-        "AGENT_STATE_PREFIX=project-adhd-shared\n" +
-        "WORKSPACE_NAME=My Project\n",
-    );
-    const result = await run(
-      ["docker", "compose", "-f", ".devcontainer/project-adhd/docker-compose.yml", "config", "--format", "json"],
-      root,
-    );
-    if (result.exitCode !== 0) {
-      throw new Error(`docker compose config failed:\n${result.stdout}${result.stderr}`);
-    }
-
-    type ComposeConfig = {
-      name?: string;
-      services?: Record<string, {
-        ports?: unknown[];
-        volumes?: Array<{ source?: string; target?: string; type?: string }>;
-      }>;
-      volumes?: Record<string, { name?: string }>;
-    };
-    const config = JSON.parse(result.stdout) as ComposeConfig;
+    const config = await renderCompose(root, BASE_STATE);
     expect(config.name).toBe("my-project-1234abcd-9f9f9f9f");
 
     const expectedVolumes = {
@@ -109,6 +126,31 @@ test("renders a per-worktree Compose project with shared agent volumes read from
     const bind = mounts.get("/workspaces/My Project");
     expect(bind?.type).toBe("bind");
     expect(bind?.source).toBe(root);
+  });
+});
+
+test("binds the host PulseAudio directory for Herdr only when initialize.sh found one", async () => {
+  await withTemporaryParent(async (parent) => {
+    const root = join(parent, "My Project");
+    const runtime = join(root, ".devcontainer", "project-adhd");
+
+    for (const state of [BASE_STATE, `${BASE_STATE}HOST_PULSE_DIR=\n`]) {
+      const config = await renderCompose(root, state);
+      expect(config.services?.workspace?.environment?.PULSE_SERVER).toBe("unix:/run/host/pulse/native");
+      // No host audio: the runtime folder stands in, so nothing is created on the host.
+      const fallback = pulseMount(config);
+      expect(fallback?.type).toBe("bind");
+      expect(fallback?.source).toBe(runtime);
+      // Long syntax never creates a missing host path; rendered output omits false.
+      expect(fallback?.bind?.create_host_path).not.toBe(true);
+    }
+
+    const hostPulse = join(parent, "run-user", "pulse");
+    const config = await renderCompose(root, `${BASE_STATE}HOST_PULSE_DIR=${hostPulse}\n`);
+    const mount = pulseMount(config);
+    expect(mount?.source).toBe(hostPulse);
+    expect(mount?.bind?.create_host_path).not.toBe(true);
+    expect(existsSync(hostPulse)).toBe(false);
   });
 });
 

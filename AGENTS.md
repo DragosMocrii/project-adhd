@@ -7,6 +7,8 @@ runtime it attaches to other Git repositories.
 
 - `bin/adhd` — host CLI dispatcher. `libexec/adhd/` — one file per
   subcommand plus `common.sh` (shared helpers and the runtime manifest).
+  `libexec/adhd/herdr-bin/` holds the `ssh` and `scp` wrappers `adhd herdr`
+  puts on Herdr's `PATH`, and the script it runs in the container.
 - `install.sh` — host installer.
 - `VERSION`, `CHANGELOG.md`, `release-please-config.json`,
   `.release-please-manifest.json` — release metadata, owned by release-please.
@@ -15,8 +17,8 @@ runtime it attaches to other Git repositories.
 - `.devcontainer/project-adhd/lib/` — shared units. `agent-tools.sh` parses
   `AGENT_TOOLS` and is sourced by `post-create.sh`, `verify.sh`, and `adhd`;
   the `*.ts` modules parse agent-CLI plugin JSON.
-- `test/` — the contract suite. Host tests: `initialize`, `adhd`, `install`,
-  `agent-tools`, `portability`. Container tests: `post-create`, `verify`.
+- `test/` — the contract suite. Host tests: `initialize`, `adhd`, `herdr`,
+  `install`, `agent-tools`, `portability`. Container tests: `post-create`, `verify`.
   Also `config` (static checks) and `parsers` (plugin-JSON module tests).
 - `package.json`, `bun.lock`, `tsconfig.json` — the suite's own tooling.
 
@@ -82,7 +84,10 @@ release-please (`.github/workflows/release.yml`) keeps a release PR open on
 
 `AGENT_TOOLS` selects which agent CLIs are installed and verified —
 comma-separated from `claude`, `codex`, `gemini`, `omp`; unset means all four.
-`rtk` and `gh` are always installed. OMP Superpowers requires `claude`
+`rtk`, `gh`, and Herdr are always installed. Herdr's sound reaches the host
+only on Linux: `initialize.sh` writes `HOST_PULSE_DIR` to `.env` when the host
+has a PulseAudio socket, and `docker-compose.yml` falls back to a harmless bind
+otherwise. OMP Superpowers requires `claude`
 selected and authenticated.
 
 ## Verifying a change
@@ -90,7 +95,7 @@ selected and authenticated.
 ```bash
 bun test
 bun run typecheck
-shellcheck install.sh bin/adhd libexec/adhd/*.sh .devcontainer/project-adhd/*.sh .devcontainer/project-adhd/lib/agent-tools.sh
+shellcheck install.sh bin/adhd libexec/adhd/*.sh libexec/adhd/herdr-bin/* .devcontainer/project-adhd/*.sh .devcontainer/project-adhd/lib/agent-tools.sh
 ```
 
 `shellcheck` is not preinstalled in the container image; CI runs it. To run

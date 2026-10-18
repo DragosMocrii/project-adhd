@@ -153,7 +153,7 @@ export async function makeInstallation(parent: string): Promise<{ checkout: stri
     await mkdir(dirname(join(source, file)), { recursive: true });
     await copyFile(join(repoRoot, file), join(source, file));
   }
-  for (const executable of ["bin/adhd", "install.sh"]) {
+  for (const executable of ["bin/adhd", "install.sh", "libexec/adhd/herdr-bin/ssh", "libexec/adhd/herdr-bin/scp"]) {
     if (existsSync(join(source, executable))) await chmod(join(source, executable), 0o755);
   }
   // Fixtures must not depend on the released version: the repository's VERSION
