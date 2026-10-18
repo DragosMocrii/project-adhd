@@ -13,7 +13,7 @@ project.
 **What you get**
 
 - `adhd`, a small host CLI: `attach`, `detach`, `update`, `new`, `herdr`,
-  `version`.
+  `devcontainer`, `version`.
 - A digest-pinned Dev Container with Bun, Node, `python3`, and the GitHub CLI.
 - Your choice of Claude Code, Codex, Gemini CLI, and OMP — see `AGENT_TOOLS`.
 - RTK configured as a hook for each selected agent.
@@ -88,6 +88,26 @@ stays clean.
 **Worktrees.** `git worktree add` does not copy untracked files, so run
 `adhd attach .` inside each new worktree. Each worktree gets its own
 container.
+
+## Start without VS Code
+
+Install the Dev Container CLI on the host:
+
+```bash
+npm install -g @devcontainers/cli
+```
+
+From an attached Git worktree root, start or stop the same workspace container
+that VS Code would use:
+
+```bash
+adhd devcontainer up       # starts or resumes the Dev Container
+adhd devcontainer stop     # stops it but keeps the container and volumes
+```
+
+Pass a different worktree root as the final argument when needed. Repeated
+`up` leaves an already-running container untouched; stopped containers can be
+resumed with `up`.
 
 ## Start a new project
 
