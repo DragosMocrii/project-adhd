@@ -44,6 +44,7 @@ jobs:
           test/initialize.test.ts
           test/adhd.test.ts
           test/herdr.test.ts
+          test/devcontainer.test.ts
           test/install.test.ts
           test/agent-tools.test.ts
           test/portability.test.ts

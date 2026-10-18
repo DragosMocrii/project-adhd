@@ -15,6 +15,7 @@ const HOST_SCRIPTS = [
   "libexec/adhd/version.sh",
   "libexec/adhd/new.sh",
   "libexec/adhd/herdr.sh",
+  "libexec/adhd/devcontainer.sh",
   "libexec/adhd/herdr-bin/ssh",
   "libexec/adhd/herdr-bin/scp",
   "libexec/adhd/herdr-bin/options.sh",
