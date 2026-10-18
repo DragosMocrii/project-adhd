@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/DragosMocrii/project-adhd/compare/v0.1.2...v0.1.3) (2026-10-18)
+
+
+### Features
+
+* add herdr with host sound notifications ([#6](https://github.com/DragosMocrii/project-adhd/issues/6)) ([f7065e9](https://github.com/DragosMocrii/project-adhd/commit/f7065e96ca74f09646ead42360a998ca8eee08dd))
+
 ## [0.1.2](https://github.com/DragosMocrii/project-adhd/compare/v0.1.1...v0.1.2) (2026-10-02)
 
 
