@@ -170,6 +170,9 @@ the only key that sshd accepts. Your own `~/.ssh/config` and keys are not
 touched, and Herdr's other SSH machines still use plain `ssh`. Panes started
 this way get the container's environment and `PATH`, the same as a VS Code
 terminal, and they share one Herdr server with the container's terminals.
+New terminals in a fresh Herdr session start in the mounted repository directory.
+Reattaching to an existing session preserves its terminals, working directories,
+and running commands.
 
 ### Host audio on Linux
 

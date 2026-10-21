@@ -42,7 +42,7 @@ herdr_key() {
 }
 
 cmd_herdr() {
-  local dir=. root instance container key public program
+  local dir=. root instance workspace_name workspace container key public session_script program
 
   if (( $# > 0 )) && [[ "$1" != -- ]]; then
     dir=$1
@@ -59,12 +59,19 @@ cmd_herdr() {
   root=$(require_worktree_root "$dir")
   instance=$(marker_get "$root/$ADHD_RUNTIME_REL/.env" COMPOSE_INSTANCE) ||
     die "$root has no Dev Container state; attach it with adhd attach, then open it in the container"
+  workspace_name=$(marker_get "$root/$ADHD_RUNTIME_REL/.env" WORKSPACE_NAME) ||
+    die "$root has no workspace name in Dev Container state; reopen the repository in its Dev Container to regenerate it"
+  [[ -n "$workspace_name" ]] ||
+    die "$root has no workspace name in Dev Container state; reopen the repository in its Dev Container to regenerate it"
+  workspace=/workspaces/$workspace_name
   container=$(herdr_container "$instance")
   key=$(herdr_key)
   public=$(cat "$key.pub") || die "unable to read $key.pub"
+  session_script=$(cat "$ADHD_HOME/libexec/adhd/herdr-bin/session.sh") ||
+    die "unable to read $ADHD_HOME/libexec/adhd/herdr-bin/session.sh"
 
   docker exec -i -u root "$container" sh -s "$public" "$ADHD_HERDR_USER" \
-    < "$ADHD_HOME/libexec/adhd/herdr-bin/prepare.sh" ||
+    "$workspace" "$session_script" < "$ADHD_HOME/libexec/adhd/herdr-bin/prepare.sh" ||
     die "unable to prepare SSH access in container $container"
 
   # Read by libexec/adhd/herdr-bin/ssh and scp, which Herdr runs from PATH.

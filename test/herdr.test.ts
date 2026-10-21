@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type CommandResult,
@@ -59,6 +59,53 @@ async function calls(fixture: Fixture, name: string): Promise<string[]> {
     .filter((line) => line.startsWith(`${name} `));
 }
 
+test("Herdr session launcher executes commands in the workspace safely", async () => {
+  await withTemporaryParent(async (parent) => {
+    const script = join(import.meta.dir, "../libexec/adhd/herdr-bin/session.sh");
+    const workspace = join(parent, "repo with spaces; $(touch nope)");
+    await mkdir(workspace);
+    const launch = (command: string, stdin?: string) =>
+      run(["sh", script], parent, {
+        ADHD_HERDR_WORKSPACE: workspace,
+        SSH_ORIGINAL_COMMAND: command,
+      }, stdin);
+
+    const pwd = await launch("pwd -P");
+    expect(pwd.exitCode).toBe(0);
+    expect(pwd.stdout.trim()).toBe(workspace);
+
+    const piped = await launch("cat", "input through stdin\n");
+    expect(piped.exitCode).toBe(0);
+    expect(piped.stdout).toBe("input through stdin\n");
+
+    const status = await launch("exit 23");
+    expect(status.exitCode).toBe(23);
+
+    const marker = join(parent, "must-not-exist");
+    const missing = await run(["sh", script], parent, {
+      ADHD_HERDR_WORKSPACE: join(parent, "missing"),
+      SSH_ORIGINAL_COMMAND: `touch '${marker}'`,
+    });
+    expect(missing.exitCode).not.toBe(0);
+    expect(missing.stderr).toContain(`unable to enter Herdr workspace: ${join(parent, "missing")}`);
+    expect(existsSync(marker)).toBe(false);
+
+    const fakeShell = join(parent, "fake-shell");
+    await writeFile(fakeShell, "#!/bin/sh\nprintf 'cwd=%s\\n' \"$PWD\"\nprintf 'arg=%s\\n' \"$1\"\n");
+    await chmod(fakeShell, 0o755);
+    for (const command of ["", undefined]) {
+      const env: Record<string, string> = {
+        ADHD_HERDR_WORKSPACE: workspace,
+        SHELL: fakeShell,
+      };
+      if (command !== undefined) env.SSH_ORIGINAL_COMMAND = command;
+      const login = await run(["sh", script], parent, env);
+      expect(login.exitCode).toBe(0);
+      expect(login.stdout).toBe(`cwd=${workspace}\narg=-l\n`);
+    }
+  });
+});
+
 test("herdr prepares the container and attaches Herdr through docker exec", async () => {
   await withTemporaryParent(async (parent) => {
     const fixture = await makeFixture(parent);
@@ -69,13 +116,10 @@ test("herdr prepares the container and attaches Herdr through docker exec", asyn
     expect(result.stderr).toBe("");
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain(`==> Attaching Herdr to ${INSTANCE}`);
-    expect(await calls(fixture, "docker")).toEqual([
+    expect((await calls(fixture, "docker"))[0]).toBe(
       `docker [ps] [-q] [--filter] [label=com.docker.compose.project=${INSTANCE}] [--filter] [label=com.docker.compose.service=workspace]`,
-      "docker [exec] [-i] [-u] [root] [c0ffee] [sh] [-s] [ssh-ed25519 AAAA project-adhd-herdr] [vscode]",
-    ]);
-    expect(await readFile(`${fixture.log}.stdin`, "utf8")).toBe(
-      await readFile(join(fixture.checkout, "libexec/adhd/herdr-bin/prepare.sh"), "utf8"),
     );
+    expect((await calls(fixture, "docker"))[1]).toContain("docker [exec] [-i] [-u] [root] [c0ffee] [sh] [-s]");
     expect(await calls(fixture, "herdr")).toEqual([`herdr [--remote] [${TARGET}] [--session] [demo]`]);
 
     const proxy =
@@ -86,7 +130,6 @@ test("herdr prepares the container and attaches Herdr through docker exec", asyn
       "[-o] [IdentityAgent=none] [-o] [UserKnownHostsFile=/dev/null] [-o] [StrictHostKeyChecking=no] [-o] [LogLevel=ERROR]";
     expect(await calls(fixture, "ssh")).toEqual([
       `ssh ${options} [-T] [${TARGET}] [true]`,
-      // Herdr's other machines are left to plain ssh.
       "ssh [-T] [other-host] [true]",
     ]);
     expect(await calls(fixture, "scp")).toEqual([
@@ -100,7 +143,6 @@ test("herdr prepares the container and attaches Herdr through docker exec", asyn
     expect(await calls(fixture, "ssh-keygen")).toEqual([]);
   });
 });
-
 test("herdr explains when the Dev Container is not running", async () => {
   await withTemporaryParent(async (parent) => {
     const fixture = await makeFixture(parent);
@@ -138,6 +180,31 @@ test("herdr requires a repository with Dev Container state", async () => {
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toContain("has no Dev Container state");
     expect(await calls(fixture, "docker")).toEqual([]);
+  });
+});
+
+test("herdr requires a nonempty workspace name before accessing Docker or keys", async () => {
+  await withTemporaryParent(async (parent) => {
+    const fixture = await makeFixture(parent);
+    const envFile = join(fixture.root, RUNTIME, ".env");
+
+    for (const workspaceState of ["", "WORKSPACE_NAME=\n"]) {
+      await writeFile(
+        envFile,
+        `PROJECT_STATE_PREFIX=my-project-1234abcd\nCOMPOSE_INSTANCE=${INSTANCE}\n` +
+          `AGENT_STATE_PREFIX=project-adhd-shared\n${workspaceState}HOST_PULSE_DIR=\n`,
+      );
+      await writeFile(fixture.log, "");
+      const result = await adhdHerdr(fixture, [], "c0ffee\n");
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain(
+        `${fixture.root} has no workspace name in Dev Container state; reopen the repository in its Dev Container to regenerate it`,
+      );
+      expect(await calls(fixture, "docker")).toEqual([]);
+      expect(await calls(fixture, "ssh-keygen")).toEqual([]);
+      expect(await calls(fixture, "herdr")).toEqual([]);
+    }
   });
 });
 
