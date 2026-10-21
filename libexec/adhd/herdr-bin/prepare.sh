@@ -18,7 +18,7 @@ case "$workspace" in
   *) echo 'invalid Herdr workspace path' >&2; exit 3 ;;
 esac
 case "$workspace" in
-  *'"'*|*'\'*|*"$cr"*|*"$nl"*) echo 'invalid Herdr workspace path' >&2; exit 3 ;;
+  *'"'*|*\\*|*"$cr"*|*"$nl"*) echo 'invalid Herdr workspace path' >&2; exit 3 ;;
 esac
 [ -d "$workspace" ] || {
   echo "Herdr workspace directory does not exist: $workspace" >&2
