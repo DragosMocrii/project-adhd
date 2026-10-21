@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.5](https://github.com/DragosMocrii/project-adhd/compare/v0.1.4...v0.1.5) (2026-10-21)
+
+
+### Features
+
+* **herdr:** start fresh sessions in repository ([b7b8317](https://github.com/DragosMocrii/project-adhd/commit/b7b8317ecd336e8e2be54181554e68d53c0b70d4))
+
+
+### Bug Fixes
+
+* **herdr:** correct backslash path pattern ([3a34d32](https://github.com/DragosMocrii/project-adhd/commit/3a34d323f249a306f6178bf4085da40da3197848))
+
 ## [0.1.4](https://github.com/DragosMocrii/project-adhd/compare/v0.1.3...v0.1.4) (2026-10-18)
 
 
