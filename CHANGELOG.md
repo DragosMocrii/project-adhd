@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.6](https://github.com/DragosMocrii/project-adhd/compare/v0.1.5...v0.1.6) (2026-10-21)
+
+
+### Bug Fixes
+
+* **herdr:** bypass stale ssh masters for container sessions ([0307888](https://github.com/DragosMocrii/project-adhd/commit/03078886929a48f950f278335bae7a3ef4b84920))
+
 ## [0.1.5](https://github.com/DragosMocrii/project-adhd/compare/v0.1.4...v0.1.5) (2026-10-21)
 
 
