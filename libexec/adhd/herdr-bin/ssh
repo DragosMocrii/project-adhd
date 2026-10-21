@@ -8,6 +8,19 @@ for argument in "$@"; do
   if [ "$argument" = "$ADHD_HERDR_TARGET" ]; then
     # shellcheck source=libexec/adhd/herdr-bin/options.sh
     . "${0%/*}/options.sh"
+    remaining=$#
+    inserted=no
+    while [ "$remaining" -gt 0 ]; do
+      argument=$1
+      shift
+      if [ "$inserted" = no ] && [ "$argument" = "$ADHD_HERDR_TARGET" ]; then
+        set -- "$@" -S none "$argument"
+        inserted=yes
+      else
+        set -- "$@" "$argument"
+      fi
+      remaining=$((remaining - 1))
+    done
     break
   fi
 done

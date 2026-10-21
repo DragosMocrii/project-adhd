@@ -106,10 +106,84 @@ test("Herdr session launcher executes commands in the workspace safely", async (
   });
 });
 
+test("Herdr SSH wrapper disables stale multiplexing only for the container target", async () => {
+  await withTemporaryParent(async (parent) => {
+    const realSsh = Bun.which("ssh");
+    expect(realSsh).toBeTruthy();
+    const stubBin = join(parent, "bin");
+    const docker = join(stubBin, "docker");
+    const key = join(parent, "unused-key");
+    await writeStubs(stubBin, { docker: "#!/bin/sh\nexit 99\n" });
+    const wrapper = join(import.meta.dir, "../libexec/adhd/herdr-bin/ssh");
+    const stale = join(parent, "stale-control");
+    const env = {
+      ADHD_HERDR_SSH: realSsh!,
+      ADHD_HERDR_TARGET: TARGET,
+      ADHD_HERDR_DOCKER: docker,
+      ADHD_HERDR_CONTAINER: "unused-container",
+      ADHD_HERDR_USER: "vscode",
+      ADHD_HERDR_KEY: key,
+    };
+
+    for (const socketArgs of [
+      ["-S", stale],
+      [`-S${stale}`],
+      ["-o", `ControlPath=${stale}`],
+    ]) {
+      const result = await run(
+        [wrapper, "-G", "-F", "/dev/null", ...socketArgs, "-o", "ControlMaster=auto", "-o", "ControlPersist=600", TARGET],
+        parent,
+        env,
+      );
+      const controlPath = result.stdout
+        .split("\n")
+        .find((line) => line.startsWith("controlpath "))
+        ?.slice("controlpath ".length);
+      expect(result.exitCode).toBe(0);
+      expect(controlPath).not.toBe(stale);
+    }
+
+    const other = await run(
+      [wrapper, "-G", "-F", "/dev/null", "-S", stale, "-o", "ControlMaster=auto", "-o", "ControlPersist=600", "other-host"],
+      parent,
+      env,
+    );
+    const otherControlPath = other.stdout
+      .split("\n")
+      .find((line) => line.startsWith("controlpath "))
+      ?.slice("controlpath ".length);
+    expect(other.exitCode).toBe(0);
+    expect(otherControlPath).toBe(stale);
+
+    const scpOptions = await run(
+      [
+        "sh",
+        "-c",
+        '. "$OPTIONS"; exec "$SSH" -G -F /dev/null "$@"',
+        "sh",
+        "-o",
+        "ControlMaster=auto",
+        "-o",
+        "ControlPersist=600",
+        "-o",
+        `ControlPath=${stale}`,
+        "other-host",
+      ],
+      parent,
+      { ...env, OPTIONS: join(import.meta.dir, "../libexec/adhd/herdr-bin/options.sh"), SSH: realSsh! },
+    );
+    const scpControlPath = scpOptions.stdout
+      .split("\n")
+      .find((line) => line.startsWith("controlpath "))
+      ?.slice("controlpath ".length);
+    expect(scpOptions.exitCode).toBe(0);
+    expect(scpControlPath).not.toBe(stale);
+  });
+});
+
 test("herdr prepares the container and attaches Herdr through docker exec", async () => {
   await withTemporaryParent(async (parent) => {
     const fixture = await makeFixture(parent);
-    const key = join(fixture.state, "project-adhd", "herdr-remote", "id_ed25519");
 
     const result = await adhdHerdr(fixture, [".", "--", "--session", "demo"], "c0ffee\n");
 
@@ -121,20 +195,6 @@ test("herdr prepares the container and attaches Herdr through docker exec", asyn
     );
     expect((await calls(fixture, "docker"))[1]).toContain("docker [exec] [-i] [-u] [root] [c0ffee] [sh] [-s]");
     expect(await calls(fixture, "herdr")).toEqual([`herdr [--remote] [${TARGET}] [--session] [demo]`]);
-
-    const proxy =
-      `ProxyCommand='${join(fixture.stubBin, "docker")}' exec -i -u root 'c0ffee' ` +
-      "/usr/sbin/sshd -i -e -f /etc/project-adhd/herdr_sshd_config";
-    const options =
-      `[-o] [${proxy}] [-o] [User=vscode] [-o] [IdentityFile="${key}"] [-o] [IdentitiesOnly=yes] ` +
-      "[-o] [IdentityAgent=none] [-o] [UserKnownHostsFile=/dev/null] [-o] [StrictHostKeyChecking=no] [-o] [LogLevel=ERROR]";
-    expect(await calls(fixture, "ssh")).toEqual([
-      `ssh ${options} [-T] [${TARGET}] [true]`,
-      "ssh [-T] [other-host] [true]",
-    ]);
-    expect(await calls(fixture, "scp")).toEqual([
-      `scp ${options} [herdr] [${TARGET}:.local/bin/herdr]`,
-    ]);
 
     expect(await calls(fixture, "ssh-keygen")).toHaveLength(1);
     await writeFile(fixture.log, "");

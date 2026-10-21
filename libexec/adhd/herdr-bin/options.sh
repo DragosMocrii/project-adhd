@@ -12,6 +12,7 @@
 # Host code: POSIX sh with BSD or GNU userland.
 
 set -- \
+  -o ControlPath=none \
   -o "ProxyCommand='$ADHD_HERDR_DOCKER' exec -i -u root '$ADHD_HERDR_CONTAINER' /usr/sbin/sshd -i -e -f /etc/project-adhd/herdr_sshd_config" \
   -o "User=$ADHD_HERDR_USER" \
   -o "IdentityFile=\"$ADHD_HERDR_KEY\"" \
