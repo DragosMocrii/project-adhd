@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.7](https://github.com/DragosMocrii/project-adhd/compare/v0.1.6...v0.1.7) (2026-10-22)
+
+
+### Features
+
+* **runtime:** keep vs code extensions and settings across rebuilds ([9339868](https://github.com/DragosMocrii/project-adhd/commit/9339868ffa802a770bf972e551e4fbcd61bed45c))
+
 ## [0.1.6](https://github.com/DragosMocrii/project-adhd/compare/v0.1.5...v0.1.6) (2026-10-21)
 
 
