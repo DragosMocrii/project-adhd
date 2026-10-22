@@ -402,11 +402,14 @@ test("separates independent repositories with the same basename", async () => {
     await runInitializer(first);
     await runInitializer(second);
 
-    const firstPrefix = await readStatePrefix(first);
-    const secondPrefix = await readStatePrefix(second);
+    const firstState = await readState(first);
+    const secondState = await readState(second);
+    const firstPrefix = firstState.PROJECT_STATE_PREFIX;
+    const secondPrefix = secondState.PROJECT_STATE_PREFIX;
     expect(firstPrefix).toMatch(/^same-name-[0-9a-f]{8}$/);
     expect(secondPrefix).toMatch(/^same-name-[0-9a-f]{8}$/);
     expect(firstPrefix).not.toBe(secondPrefix);
+    expect(firstState.COMPOSE_INSTANCE).not.toBe(secondState.COMPOSE_INSTANCE);
   });
 });
 
@@ -427,7 +430,10 @@ test("preserves a valid state prefix and an existing devcontainer secret on reru
     await writeFile(secretPath, secret, { mode: 0o600 });
 
     await runInitializer(root);
+    const firstComposeInstance = (await readState(root)).COMPOSE_INSTANCE;
     await runInitializer(root);
+
+    expect((await readState(root)).COMPOSE_INSTANCE).toBe(firstComposeInstance);
 
     expect(await readStatePrefix(root)).toBe(preservedPrefix);
     expect(await readFile(secretPath, "utf8")).toBe(secret);

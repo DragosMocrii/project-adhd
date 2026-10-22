@@ -62,6 +62,7 @@ type ComposeMount = {
 type ComposeConfig = {
   name?: string;
   services?: Record<string, {
+    build?: { context?: string; dockerfile?: string };
     environment?: Record<string, string>;
     ports?: unknown[];
     volumes?: ComposeMount[];
@@ -81,6 +82,8 @@ async function renderCompose(root: string, state: string): Promise<ComposeConfig
   const runtime = join(root, ".devcontainer", "project-adhd");
   await mkdir(runtime, { recursive: true });
   await copyFile(composePath, join(runtime, "docker-compose.yml"));
+  await mkdir(join(runtime, "image"), { recursive: true });
+  await copyFile(join(runtimeDir, "image", "Dockerfile"), join(runtime, "image", "Dockerfile"));
   await writeFile(join(runtime, "devcontainer.env"), "");
   await writeFile(join(runtime, ".env"), state);
   const result = await run(
@@ -112,6 +115,9 @@ test("renders a per-worktree Compose project with shared agent volumes read from
       "gemini-state": "project-adhd-shared-gemini",
       "omp-state": "project-adhd-shared-omp",
       "lock-state": "project-adhd-shared-lock",
+      "vscode-extensions": "my-project-1234abcd-vscode-extensions",
+      "vscode-machine": "my-project-1234abcd-vscode-machine",
+      "vscode-user": "my-project-1234abcd-vscode-user",
     };
     expect(Object.keys(config.volumes ?? {}).sort()).toEqual(Object.keys(expectedVolumes).sort());
     for (const [logicalName, explicitName] of Object.entries(expectedVolumes)) {
@@ -119,13 +125,56 @@ test("renders a per-worktree Compose project with shared agent volumes read from
     }
 
     const workspace = config.services?.workspace;
+    expect(workspace?.build?.context).toBe(join(root, ".devcontainer", "project-adhd", "image"));
     expect(workspace?.ports ?? []).toHaveLength(0);
     const mounts = new Map((workspace?.volumes ?? []).map((mount) => [mount.target, mount]));
+    const vscodeMounts = [
+      ["/home/vscode/.vscode-server/extensions", "vscode-extensions"],
+      ["/home/vscode/.vscode-server/data/Machine", "vscode-machine"],
+      ["/home/vscode/.vscode-server/data/User", "vscode-user"],
+    ] as const;
+    const vscodeTargets = vscodeMounts.map(([target]) => target);
+    expect(
+      (workspace?.volumes ?? [])
+        .filter((mount) => mount.target?.startsWith("/home/vscode/.vscode-server"))
+        .map((mount) => mount.target)
+        .sort(),
+    ).toEqual([...vscodeTargets].sort());
+    for (const [target, source] of vscodeMounts) {
+      const mount = mounts.get(target);
+      expect(mount?.type).toBe("volume");
+      expect(mount?.source).toBe(source);
+    }
     expect(mounts.get("/home/vscode/.local/state/project-adhd")?.source).toBe("lock-state");
     expect(mounts.get("/home/vscode/.local/share/rtk")?.source).toBe("rtk-data-state");
     const bind = mounts.get("/workspaces/My Project");
     expect(bind?.type).toBe("bind");
     expect(bind?.source).toBe(root);
+  });
+});
+
+test("scopes VS Code state to the project, shared by its worktrees and independent of agent scope", async () => {
+  await withTemporaryParent(async (parent) => {
+    const root = join(parent, "My Project");
+    const base = await renderCompose(root, BASE_STATE);
+    const worktreeState = BASE_STATE.replace(
+      "my-project-1234abcd-9f9f9f9f",
+      "my-project-1234abcd-8e8e8e8e",
+    );
+    const otherWorktree = await renderCompose(root, worktreeState);
+    const otherProject = await renderCompose(root, BASE_STATE.replaceAll("my-project-1234abcd", "my-project-5678ef01"));
+    const vscodeVolumes = ["vscode-extensions", "vscode-machine", "vscode-user"];
+    for (const logicalName of vscodeVolumes) {
+      expect(base.volumes?.[logicalName]?.name).toBe(`my-project-1234abcd-${logicalName}`);
+      expect(otherWorktree.volumes?.[logicalName]?.name).toBe(base.volumes?.[logicalName]?.name);
+      expect(otherProject.volumes?.[logicalName]?.name).toBe(`my-project-5678ef01-${logicalName}`);
+    }
+
+    const agentScopeState = BASE_STATE.replace("project-adhd-shared", "another-shared-scope");
+    const otherAgentScope = await renderCompose(root, agentScopeState);
+    for (const logicalName of vscodeVolumes) {
+      expect(otherAgentScope.volumes?.[logicalName]?.name).toBe(base.volumes?.[logicalName]?.name);
+    }
   });
 });
 

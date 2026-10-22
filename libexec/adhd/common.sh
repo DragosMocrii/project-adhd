@@ -20,6 +20,7 @@ ADHD_RUNTIME_FILES=(
   post-create.sh
   verify.sh
   devcontainer.env.example
+  image/Dockerfile
   lib/agent-tools.sh
   lib/claude-marketplaces.ts
   lib/claude-plugins.ts

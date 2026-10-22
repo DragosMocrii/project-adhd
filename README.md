@@ -200,6 +200,7 @@ user's UID matches the container's `vscode` user (normally 1000).
 | `project-adhd-shared-claude`, `-gh`, `-codex`, `-gemini`, `-omp`, `-rtk-config` | shared by every attached repository |
 | `project-adhd-shared-lock` | shared; serializes concurrent first-time setup |
 | `<project-prefix>-rtk-data` | this repository only |
+| `<project-prefix>-vscode-extensions`, `-vscode-machine`, `-vscode-user` | this repository only, shared by its worktrees; installed extensions, remote settings, and extension storage |
 
 Agent histories stay separate because each repository is mounted at its own
 path, `/workspaces/<folder-name>`. Two clones with the same folder name open
@@ -213,9 +214,15 @@ your environment or the repository's root `.env` may override it;
 To keep a repository's agent state private — separate logins included — set
 `AGENT_STATE_SCOPE=project` in its `devcontainer.env` and rebuild.
 
-Tool binaries are reinstalled on rebuild; logins, plugins, and histories stay
-in the volumes. Deleting `.devcontainer/project-adhd/.env` or
-`devcontainer.env` does not remove any volume.
+Agent tool binaries and VS Code Server binaries are reinstalled on rebuild.
+Agent logins, plugins, and histories stay in the agent volumes, which are
+shared unless `AGENT_STATE_SCOPE=project`. VS Code extensions you install in
+the container, remote settings, and extension storage stay in this
+repository's VS Code volumes, so every worktree of the repository sees them.
+Workspace `.vscode/settings.json` persists through the repository bind mount.
+Extensions installed before these volumes existed were not kept; install them
+once more. Deleting `.devcontainer/project-adhd/.env` or `devcontainer.env`
+does not remove any volume.
 
 ## Updating and customizing
 

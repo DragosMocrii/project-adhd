@@ -2,7 +2,8 @@ name: "${COMPOSE_INSTANCE}"
 
 services:
   workspace:
-    image: mcr.microsoft.com/devcontainers/base@sha256:d94c97dd9cacf183d0a6fd12a8e87b526e9e928307674ae9c94139139c0c6eae
+    build:
+      context: ./image
     env_file: devcontainer.env
     command: sleep infinity
     environment:
@@ -29,6 +30,9 @@ services:
       - gemini-state:/home/vscode/.gemini
       - omp-state:/home/vscode/.omp
       - lock-state:/home/vscode/.local/state/project-adhd
+      - vscode-extensions:/home/vscode/.vscode-server/extensions
+      - vscode-machine:/home/vscode/.vscode-server/data/Machine
+      - vscode-user:/home/vscode/.vscode-server/data/User
       - ../..:/workspaces/${WORKSPACE_NAME}:cached
 
 volumes:
@@ -48,3 +52,11 @@ volumes:
     name: "${AGENT_STATE_PREFIX}-omp"
   lock-state:
     name: "${AGENT_STATE_PREFIX}-lock"
+  # VS Code state follows the project, not the worktree: linked worktrees share
+  # PROJECT_STATE_PREFIX, so switching worktrees keeps installed extensions.
+  vscode-extensions:
+    name: "${PROJECT_STATE_PREFIX}-vscode-extensions"
+  vscode-machine:
+    name: "${PROJECT_STATE_PREFIX}-vscode-machine"
+  vscode-user:
+    name: "${PROJECT_STATE_PREFIX}-vscode-user"
