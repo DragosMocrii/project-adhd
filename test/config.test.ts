@@ -96,9 +96,6 @@ async function renderCompose(root: string, state: string): Promise<ComposeConfig
   return JSON.parse(result.stdout) as ComposeConfig;
 }
 
-function pulseMount(config: ComposeConfig): ComposeMount | undefined {
-  return config.services?.workspace?.volumes?.find((mount) => mount.target === "/run/host/pulse");
-}
 
 test("renders a per-worktree Compose project with shared agent volumes read from .env", async () => {
   await withTemporaryParent(async (parent) => {
@@ -123,10 +120,12 @@ test("renders a per-worktree Compose project with shared agent volumes read from
     for (const [logicalName, explicitName] of Object.entries(expectedVolumes)) {
       expect(config.volumes?.[logicalName]?.name).toBe(explicitName);
     }
-
     const workspace = config.services?.workspace;
     expect(workspace?.build?.context).toBe(join(root, ".devcontainer", "project-adhd", "image"));
+
+    expect(workspace?.environment?.PULSE_SERVER).toBeUndefined();
     expect(workspace?.ports ?? []).toHaveLength(0);
+    expect((workspace?.volumes ?? []).some((mount) => mount.target === "/run/host/pulse")).toBe(false);
     const mounts = new Map((workspace?.volumes ?? []).map((mount) => [mount.target, mount]));
     const vscodeMounts = [
       ["/home/vscode/.vscode-server/extensions", "vscode-extensions"],
@@ -178,30 +177,6 @@ test("scopes VS Code state to the project, shared by its worktrees and independe
   });
 });
 
-test("binds the host PulseAudio directory for Herdr only when initialize.sh found one", async () => {
-  await withTemporaryParent(async (parent) => {
-    const root = join(parent, "My Project");
-    const runtime = join(root, ".devcontainer", "project-adhd");
-
-    for (const state of [BASE_STATE, `${BASE_STATE}HOST_PULSE_DIR=\n`]) {
-      const config = await renderCompose(root, state);
-      expect(config.services?.workspace?.environment?.PULSE_SERVER).toBe("unix:/run/host/pulse/native");
-      // No host audio: the runtime folder stands in, so nothing is created on the host.
-      const fallback = pulseMount(config);
-      expect(fallback?.type).toBe("bind");
-      expect(fallback?.source).toBe(runtime);
-      // Long syntax never creates a missing host path; rendered output omits false.
-      expect(fallback?.bind?.create_host_path).not.toBe(true);
-    }
-
-    const hostPulse = join(parent, "run-user", "pulse");
-    const config = await renderCompose(root, `${BASE_STATE}HOST_PULSE_DIR=${hostPulse}\n`);
-    const mount = pulseMount(config);
-    expect(mount?.source).toBe(hostPulse);
-    expect(mount?.bind?.create_host_path).not.toBe(true);
-    expect(existsSync(hostPulse)).toBe(false);
-  });
-});
 
 test("opens the workspace at /workspaces/<folder> with runtime-folder lifecycle commands and no host Docker feature", async () => {
   const config = JSON.parse(await readFile(devcontainerConfigPath, "utf8")) as {

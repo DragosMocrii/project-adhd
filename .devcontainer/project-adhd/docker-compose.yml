@@ -6,22 +6,7 @@ services:
       context: ./image
     env_file: devcontainer.env
     command: sleep infinity
-    environment:
-      PULSE_SERVER: unix:/run/host/pulse/native
     volumes:
-      # Host PulseAudio (or pipewire-pulse) for Herdr sound notifications.
-      # initialize.sh sets HOST_PULSE_DIR in .env only on a Linux host with a
-      # socket at $XDG_RUNTIME_DIR/pulse/native. Otherwise (macOS, no audio
-      # server) this binds the runtime folder, which the workspace mount
-      # already exposes and which has no `native` socket: creation succeeds,
-      # sound is silently unavailable, and Docker never creates a host path.
-      # The directory is bound rather than the socket so a restarted audio
-      # server's new socket is still visible.
-      - type: bind
-        source: ${HOST_PULSE_DIR:-.}
-        target: /run/host/pulse
-        bind:
-          create_host_path: false
       - claude-state:/home/vscode/.claude
       - github-state:/home/vscode/.config/gh
       - rtk-config-state:/home/vscode/.config/rtk

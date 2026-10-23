@@ -28,7 +28,7 @@ async function makeFixture(parent: string): Promise<Fixture> {
   await writeFile(
     join(root, RUNTIME, ".env"),
     `PROJECT_STATE_PREFIX=my-project-1234abcd\nCOMPOSE_INSTANCE=${INSTANCE}\n` +
-      "AGENT_STATE_PREFIX=project-adhd-shared\nWORKSPACE_NAME=project\nHOST_PULSE_DIR=\n",
+      "AGENT_STATE_PREFIX=project-adhd-shared\nWORKSPACE_NAME=project\n",
   );
   const stubBin = join(parent, "stub-bin");
   const log = join(parent, "calls");
@@ -252,7 +252,7 @@ test("herdr requires a nonempty workspace name before accessing Docker or keys",
       await writeFile(
         envFile,
         `PROJECT_STATE_PREFIX=my-project-1234abcd\nCOMPOSE_INSTANCE=${INSTANCE}\n` +
-          `AGENT_STATE_PREFIX=project-adhd-shared\n${workspaceState}HOST_PULSE_DIR=\n`,
+          `AGENT_STATE_PREFIX=project-adhd-shared\n${workspaceState}`,
       );
       await writeFile(fixture.log, "");
       const result = await adhdHerdr(fixture, [], "c0ffee\n");

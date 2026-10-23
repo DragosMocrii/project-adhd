@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
-import { createServer, type Server } from "node:net";
 import { isAbsolute, join } from "node:path";
 import { checked, CommandResult, hostBash, prepareRepository, run, withTemporaryParent } from "./helpers";
 
@@ -262,7 +261,7 @@ test("shares inferred identity through local config when worktree config is disa
   });
 });
 
-const STATE_KEYS = ["PROJECT_STATE_PREFIX", "COMPOSE_INSTANCE", "AGENT_STATE_PREFIX", "WORKSPACE_NAME", "HOST_PULSE_DIR"];
+const STATE_KEYS = ["PROJECT_STATE_PREFIX", "COMPOSE_INSTANCE", "AGENT_STATE_PREFIX", "WORKSPACE_NAME"];
 
 async function readState(root: string): Promise<Record<string, string>> {
   const contents = await readFile(join(root, ".devcontainer", "project-adhd", ".env"), "utf8");
@@ -413,7 +412,7 @@ test("separates independent repositories with the same basename", async () => {
   });
 });
 
-// The fixture is the four-key layout written before HOST_PULSE_DIR existed.
+// Legacy five-key state includes HOST_PULSE_DIR, which initialize now removes.
 test("preserves a valid state prefix and an existing devcontainer secret on reruns", async () => {
   await withTemporaryParent(async (parent) => {
     const root = join(parent, "preserved-state");
@@ -425,7 +424,7 @@ test("preserves a valid state prefix and an existing devcontainer secret on reru
     const secret = "CONTEXT7_API_KEY=keep-this-secret\n";
     await writeFile(
       statePath,
-      `PROJECT_STATE_PREFIX=${preservedPrefix}\nCOMPOSE_INSTANCE=old\nAGENT_STATE_PREFIX=old\nWORKSPACE_NAME=old\n`,
+      `PROJECT_STATE_PREFIX=${preservedPrefix}\nCOMPOSE_INSTANCE=old\nAGENT_STATE_PREFIX=old\nWORKSPACE_NAME=old\nHOST_PULSE_DIR=/old/pulse\n`,
     );
     await writeFile(secretPath, secret, { mode: 0o600 });
 
@@ -455,65 +454,6 @@ test("writes the state keys: per-worktree Compose instance, shared agent prefix,
   });
 });
 
-async function listenOnSocket(path: string): Promise<Server> {
-  const server = createServer();
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(path, resolve);
-  });
-  return server;
-}
-
-test("records the host PulseAudio directory only when its socket exists on Linux", async () => {
-  await withTemporaryParent(async (parent) => {
-    const root = join(parent, "audio");
-    const runtimeDirectory = join(parent, "xdg");
-    const socketPath = join(runtimeDirectory, "pulse", "native");
-    await mkdir(root);
-    await mkdir(join(runtimeDirectory, "pulse"), { recursive: true });
-    await prepareRepository(root);
-
-    await runInitializer(root, { XDG_RUNTIME_DIR: runtimeDirectory });
-    expect((await readState(root)).HOST_PULSE_DIR).toBe("");
-
-    await runInitializer(root, { XDG_RUNTIME_DIR: "" });
-    expect((await readState(root)).HOST_PULSE_DIR).toBe("");
-
-    // A regular file is not an audio server.
-    await writeFile(socketPath, "");
-    await runInitializer(root, { XDG_RUNTIME_DIR: runtimeDirectory });
-    expect((await readState(root)).HOST_PULSE_DIR).toBe("");
-    await rm(socketPath);
-
-    const stubBin = join(parent, "bin");
-    await mkdir(stubBin);
-    const withEngine = async (engine: string | null): Promise<string> => {
-      const docker = engine === null
-        ? "#!/bin/sh\necho 'Cannot connect to the Docker daemon' >&2\nexit 1\n"
-        : `#!/bin/sh\nprintf '%s\\n' ${JSON.stringify(engine)}\n`;
-      await writeFile(join(stubBin, "docker"), docker, { mode: 0o755 });
-      await runInitializer(root, {
-        XDG_RUNTIME_DIR: runtimeDirectory,
-        PATH: `${stubBin}:${process.env.PATH ?? ""}`,
-      });
-      return (await readState(root)).HOST_PULSE_DIR;
-    };
-    const hostname = (await checked(["uname", "-n"], root)).trim();
-
-    const server = await listenOnSocket(socketPath);
-    try {
-      const expected = process.platform === "linux" ? join(runtimeDirectory, "pulse") : "";
-      expect(await withEngine(`Ubuntu 24.04.3 LTS|${hostname}`)).toBe(expected);
-      // Docker Desktop for Linux runs a VM that cannot see $XDG_RUNTIME_DIR.
-      expect(await withEngine("Docker Desktop|docker-desktop")).toBe("");
-      // A remote daemon names another machine.
-      expect(await withEngine(`Ubuntu 24.04.3 LTS|not-${hostname}`)).toBe("");
-      expect(await withEngine(null)).toBe("");
-    } finally {
-      server.close();
-    }
-  });
-});
 
 test("gives each linked worktree its own Compose instance but one state prefix", async () => {
   await withTemporaryParent(async (parent) => {
