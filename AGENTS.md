@@ -264,11 +264,9 @@ The generated release PR is the source of the proposed version.
 
 `AGENT_TOOLS` selects which agent CLIs are installed and verified —
 comma-separated from `claude`, `codex`, `gemini`, `omp`; unset means all four.
-`rtk`, `gh`, and Herdr are always installed. Herdr's sound reaches the host
-only on Linux: `initialize.sh` writes `HOST_PULSE_DIR` to `.env` when the host
-has a PulseAudio socket, and `docker-compose.yml` falls back to a harmless bind
-otherwise. OMP Superpowers requires `claude`
-selected and authenticated.
+`rtk`, `gh`, and Herdr are always installed. `adhd herdr` runs a Herdr client
+on the host and connects to the Herdr server in the Dev Container. OMP
+Superpowers requires `claude` selected and authenticated.
 
 ## Verifying a change
 

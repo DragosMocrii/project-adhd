@@ -80,7 +80,6 @@ test("runs pre-login post-create successfully while still installing auth-free A
       rtk: "#!/bin/sh\nexit 0\n",
       omp: "#!/bin/sh\nexit 0\n",
       herdr: "#!/bin/sh\nexit 0\n",
-      mpv: "#!/bin/sh\nexit 0\n",
     };
     await writeStubs(stubBin, stubs);
 
@@ -117,7 +116,6 @@ test("installs Gemini CLI globally when the command is missing", async () => {
       omp: "#!/bin/sh\nexit 0\n",
       rtk: "#!/bin/sh\nexit 0\n",
       herdr: "#!/bin/sh\nexit 0\n",
-      mpv: "#!/bin/sh\nexit 0\n",
       npm: "#!/bin/sh\nprintf '%s|%s' \"$NPM_CONFIG_PREFIX\" \"$*\" > \"$GEMINI_INSTALL_MARKER\"\n",
       bun: "#!/bin/sh\ncase \"$*\" in\n  'pm -g untrusted')\n    if [ -f \"$OMP_TRUST_STAGE\" ]; then printf 'sharp\\n'; else printf 'onnxruntime-node\\nprotobufjs\\n'; fi\n    ;;\n  *)\n    printf '%s\\n' \"$*\" >> \"$OMP_TRUST_MARKER\"\n    : > \"$OMP_TRUST_STAGE\"\n    ;;\nesac\n",
     };
@@ -168,68 +166,24 @@ const preinstalledAgents: Record<string, string> = {
   bun: "#!/bin/sh\nexit 0\n",
 };
 
-test("installs Herdr and an audio player when missing, and skips both on a rerun", async () => {
+test("installs Herdr and its remote SSH server without installing an audio player", async () => {
   await withTemporaryParent(async (parent) => {
     const { home, stubBin } = await makeHome(parent);
     const log = join(parent, "installer-log");
-
-    // The Herdr installer and apt-get install real stubs, as on a fresh container.
-    const stubs: Record<string, string> = {
+    await writeStubs(stubBin, {
       ...preinstalledAgents,
-      curl: `#!/bin/sh\nprintf 'curl %s\\n' "$*" >> ${JSON.stringify(log)}\ncase "$*" in\n  *herdr.dev/install.sh*) printf 'printf "#!/bin/sh\\\\n" > "$HOME/.local/bin/herdr"; chmod +x "$HOME/.local/bin/herdr"\\n';;\n  *) echo 'unexpected installer invoked' >&2; exit 42;;\nesac\n`,
+      curl: `#!/bin/sh\nprintf '%s\\n' "$*" >> ${JSON.stringify(log)}\nprintf 'printf "#!/bin/sh\\\\n" > "$HOME/.local/bin/herdr"; chmod +x "$HOME/.local/bin/herdr"\\n'`,
       sh: "#!/bin/bash\nexec /bin/bash \"$@\"\n",
       chmod: "#!/bin/bash\nexec /bin/chmod \"$@\"\n",
-      sudo: `#!/bin/sh\nprintf 'sudo %s\\n' "$*" >> ${JSON.stringify(log)}\ncase "$*" in\n  *'install -y --no-install-recommends mpv') printf '#!/bin/sh\\n' > "$HOME/.local/bin/mpv"; /bin/chmod +x "$HOME/.local/bin/mpv";;\n  *openssh-server) printf '#!/bin/sh\\n' > "$HOME/sshd"; /bin/chmod +x "$HOME/sshd";;\nesac\n`,
-    };
-    await writeStubs(stubBin, stubs);
+      sudo: `#!/bin/sh\nprintf 'sudo %s\\n' "$*" >> ${JSON.stringify(log)}\nprintf '#!/bin/sh\\n' > "$HOME/sshd"; /bin/chmod +x "$HOME/sshd"\n`,
+    });
 
-    const sshd = join(home, "sshd");
-    const first = await runInstallTools(home, stubBin, sshd);
-    expect(first.exitCode).toBe(0);
-    expect(first.stdout).toContain("==> Installing Herdr");
-    expect(first.stdout).toContain("==> Installing mpv for Herdr sound notifications");
-    expect(first.stdout).toContain("==> Installing sshd for adhd herdr");
-    const calls = (await readFile(log, "utf8")).trimEnd().split("\n");
-    expect(calls).toHaveLength(7);
-    expect(calls.slice(0, 3)).toEqual([
-      "curl -fsSL https://herdr.dev/install.sh",
-      "sudo apt-get update",
-      "sudo apt-get install -y --no-install-recommends mpv",
-    ]);
-    // The shell expands the apt lists glob before sudo sees it.
-    expect(calls[3]).toStartWith("sudo rm -rf /var/lib/apt/lists/");
-    expect(calls.slice(4, 6)).toEqual([
-      "sudo apt-get update",
-      "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends openssh-server",
-    ]);
-    expect(calls[6]).toStartWith("sudo rm -rf /var/lib/apt/lists/");
-
-    await writeFile(log, "");
-    const second = await runInstallTools(home, stubBin, sshd);
-    expect(second.exitCode).toBe(0);
-    expect(second.stdout).toContain("==> Herdr is already installed; skipping Herdr installer");
-    expect(second.stdout).toContain("==> Herdr audio player mpv is already installed");
-    expect(second.stdout).toContain("==> sshd for adhd herdr is already installed");
-    expect(await readFile(log, "utf8")).toBe("");
-  });
-});
-
-test("keeps any supported audio player instead of installing mpv", async () => {
-  await withTemporaryParent(async (parent) => {
-    const { home, stubBin } = await makeHome(parent);
-
-    const stubs: Record<string, string> = {
-      ...preinstalledAgents,
-      herdr: "#!/bin/sh\nexit 0\n",
-      "pw-play": "#!/bin/sh\nexit 0\n",
-      sudo: "#!/bin/sh\necho 'apt-get must not run' >&2\nexit 42\n",
-    };
-    await writeStubs(stubBin, stubs);
-
-    const result = await runInstallTools(home, stubBin);
+    const result = await runInstallTools(home, stubBin, join(home, "sshd"));
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("==> Herdr audio player pw-play is already installed");
-    expect(result.stdout).not.toContain("Installing mpv");
+    expect(result.stdout).toContain("==> Installing Herdr");
+    expect(result.stdout).toContain("==> Installing sshd for adhd herdr");
+    expect(result.stdout).not.toContain("mpv");
+    expect(await readFile(log, "utf8")).not.toContain("mpv");
   });
 });
 
@@ -266,7 +220,6 @@ test("reinstalls RTK when the existing binary fails the RTK identity check", asy
       omp: "#!/bin/sh\nexit 0\n",
       gemini: "#!/bin/sh\nexit 0\n",
       herdr: "#!/bin/sh\nexit 0\n",
-      mpv: "#!/bin/sh\nexit 0\n",
       rtk: "#!/bin/sh\nif [ \"$1\" = gain ]; then exit 1; fi\nexit 0\n",
       curl: "#!/bin/sh\ncase \"$*\" in\n  *rtk-ai/rtk/*) printf 'printf installed > \"$RTK_INSTALL_MARKER\"\\n';;\n  *) echo 'unexpected installer invoked' >&2; exit 42;;\nesac\n",
       bun: "#!/bin/sh\nif [ \"$1\" = pm ]; then exit 0; fi\necho 'unexpected OMP installer invoked' >&2\nexit 42\n",
@@ -305,7 +258,6 @@ test("installs and configures only the selected agent tool", async () => {
       claude: "#!/bin/sh\nif [ \"$1\" = auth ] && [ \"$2\" = status ]; then exit 1; fi\nexit 0\n",
       rtk: "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$HOME/rtk-args\"\nexit 0\n",
       herdr: "#!/bin/sh\nexit 0\n",
-      mpv: "#!/bin/sh\nexit 0\n",
     };
     await writeStubs(stubBin, stubs);
 
@@ -345,7 +297,6 @@ test("skips OMP Superpowers when omp is selected without claude", async () => {
       omp: "#!/bin/sh\nexit 0\n",
       rtk: "#!/bin/sh\nexit 0\n",
       herdr: "#!/bin/sh\nexit 0\n",
-      mpv: "#!/bin/sh\nexit 0\n",
     };
     await writeStubs(stubBin, stubs);
 

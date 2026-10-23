@@ -17,9 +17,8 @@ project.
 - A digest-pinned Dev Container with Bun, Node, `python3`, and the GitHub CLI.
 - Your choice of Claude Code, Codex, Gemini CLI, and OMP — see `AGENT_TOOLS`.
 - RTK configured as a hook for each selected agent.
-- [Herdr](https://herdr.dev), with sound notifications on the host: through
-  its audio server on Linux, or with `adhd herdr` anywhere — see
-  [Herdr sound](#herdr-sound).
+- [Herdr](https://herdr.dev), with sound notifications on your host by running
+  its client locally — see [Herdr on the host](#herdr-on-the-host).
 - The Superpowers plugin and the Archify skill installed per agent.
 - One container per repository (and per worktree); several can run at once.
 - Nothing committed to the repository you attach to.
@@ -140,11 +139,10 @@ Rebuild Container**, then `bash .devcontainer/project-adhd/post-create.sh`.
   authenticated; otherwise its Superpowers step is skipped with a message.
 - **Gemini CLI has no RTK integration** and no Archify destination.
 
-## Herdr sound
+## Herdr on the host
 
-There are two ways to hear Herdr's notifications on the host.
 
-### `adhd herdr`: a Herdr client on the host (macOS, Windows, Linux)
+### Usage
 
 Herdr is a server, which runs your panes, and clients that draw it. Sounds and
 system notifications play wherever the client runs. `adhd herdr` runs the
@@ -173,25 +171,6 @@ terminal, and they share one Herdr server with the container's terminals.
 New terminals in a fresh Herdr session start in the mounted repository directory.
 Reattaching to an existing session preserves its terminals, working directories,
 and running commands.
-
-### Host audio on Linux
-
-Herdr plays its notification sounds with `paplay`, `pw-play`, `ffplay`,
-`mpg123`, or `mpv`; `post-create.sh` installs `mpv` when none is present.
-The sound reaches you only on a **Linux host with a native Docker Engine**
-and PulseAudio or PipeWire (`pipewire-pulse`): `initialize.sh` looks for the
-socket at `$XDG_RUNTIME_DIR/pulse/native`, and when it finds one and
-`docker info` reports a non-Desktop engine on the same machine, the container
-binds that directory at `/run/host/pulse` with `PULSE_SERVER` pointing at it.
-
-Everywhere else (macOS, Docker Desktop for Linux, whose VM cannot see the
-socket, a remote Docker daemon, or a Linux host without an audio server) the
-container is still created. Herdr just runs silently in the container (use
-`adhd herdr` instead), and `verify.sh` prints a `WARN` instead of failing. If
-you start the audio server later, run **Dev Containers: Rebuild Container** so
-`initialize.sh` finds it. The host socket also has to accept the
-container's user: PipeWire does by default, and PulseAudio does when the host
-user's UID matches the container's `vscode` user (normally 1000).
 
 ## State and isolation
 

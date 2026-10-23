@@ -106,22 +106,6 @@ trust_omp_dependencies() {
   esac
 }
 
-install_herdr_audio_player() {
-  local player
-
-  for player in paplay pw-play ffplay mpg123 mpv; do
-    if command -v "$player" >/dev/null 2>&1; then
-      echo "==> Herdr audio player $player is already installed"
-      return
-    fi
-  done
-
-  echo '==> Installing mpv for Herdr sound notifications'
-  sudo apt-get update
-  sudo apt-get install -y --no-install-recommends mpv
-  sudo rm -rf /var/lib/apt/lists/*
-}
-
 # sshd for `adhd herdr`, which runs it on stdin/stdout through docker exec so a
 # Herdr client on the host can attach. The base image's policy-rc.d keeps the
 # package from starting a daemon, and no port is published.
@@ -180,7 +164,6 @@ install_tools() {
     curl -fsSL https://herdr.dev/install.sh | sh
   fi
 
-  install_herdr_audio_player
   install_herdr_remote_server
 
   if agent_tool_selected omp; then

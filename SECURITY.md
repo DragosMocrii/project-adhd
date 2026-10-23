@@ -19,17 +19,11 @@ and on every manual rerun. It fetches and executes the following, as the
 | OMP | npm registry (`@oh-my-pi/pi-coding-agent`) | `bun install -g` |
 | Archify skill | `bunx skills@latest add tt-a1i/archify` | `bunx` |
 | Herdr installer | `https://herdr.dev/install.sh` | `curl \| sh` |
-| mpv, if no audio player is present | the base image's apt sources | `sudo apt-get install` |
 | openssh-server, for `adhd herdr` | the base image's apt sources | `sudo apt-get install` |
 
 Set `AGENT_TOOLS` in `.devcontainer/project-adhd/devcontainer.env` to install
 only the tools you actually use. `rtk`, `gh`, and Herdr are always installed.
 
-On a Linux host with a PulseAudio or PipeWire socket, the container binds the
-host's `$XDG_RUNTIME_DIR/pulse` directory so Herdr can play sounds. Processes in
-the container can then play audio on the host, and with PulseAudio's
-`module-native-protocol-unix` can do anything else that protocol allows, such
-as recording from the host's microphone.
 
 ## What adhd herdr does
 
