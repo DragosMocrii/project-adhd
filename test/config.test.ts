@@ -152,6 +152,15 @@ test("renders a per-worktree Compose project with shared agent volumes read from
   });
 });
 
+test("installs Python with its full standard library in the container image", async () => {
+  const dockerfile = await readFile(
+    join(runtimeDir, "image", "Dockerfile"),
+    "utf8",
+  );
+  expect(dockerfile).toMatch(/apt-get install -y --no-install-recommends python3\b/);
+  expect(dockerfile).toContain("apt-get update");
+});
+
 test("scopes VS Code state to the project, shared by its worktrees and independent of agent scope", async () => {
   await withTemporaryParent(async (parent) => {
     const root = join(parent, "My Project");
