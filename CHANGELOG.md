@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.8](https://github.com/DragosMocrii/project-adhd/compare/v0.1.7...v0.1.8) (2026-10-23)
+
+
+### Bug Fixes
+
+* **herdr:** remove container audio forwarding ([570ae48](https://github.com/DragosMocrii/project-adhd/commit/570ae4814a2d4777d50db5dcaf025281b2f0898f))
+
 ## [0.1.7](https://github.com/DragosMocrii/project-adhd/compare/v0.1.6...v0.1.7) (2026-10-22)
 
 
