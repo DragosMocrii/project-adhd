@@ -227,7 +227,7 @@ test("presents one aligned project identity and a Bun-matched types pin", async 
   expect(packageManifest.devDependencies?.["@types/bun"]).toBe("1.4.2");
 
   const bunFeature = devcontainerConfig.features?.["ghcr.io/devcontainers-extra/features/bun:1"];
-  expect(bunFeature?.version).toBe("1.4.0");
+  expect(bunFeature?.version).toBe("1.4.4");
 });
 
 test("documents AGENT_TOOLS in the tracked environment example", async () => {
