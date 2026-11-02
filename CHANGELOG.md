@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.10](https://github.com/DragosMocrii/project-adhd/compare/v0.1.9...v0.1.10) (2026-11-02)
+
+
+### Bug Fixes
+
+* **devcontainer:** update Bun to 1.4.4 ([129f6cb](https://github.com/DragosMocrii/project-adhd/commit/129f6cb9b3e8fb26c1303488106a02e4fdffb098))
+
 ## [0.1.9](https://github.com/DragosMocrii/project-adhd/compare/v0.1.8...v0.1.9) (2026-10-23)
 
 
