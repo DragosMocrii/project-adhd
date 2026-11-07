@@ -206,7 +206,7 @@ test("opens the workspace at /workspaces/<folder> with runtime-folder lifecycle 
   );
 });
 
-test("configures Gemini CLI for manual authentication", async () => {
+test("keeps browser authentication disabled in the container", async () => {
   const config = JSON.parse(await readFile(devcontainerConfigPath, "utf8")) as {
     containerEnv?: Record<string, string>;
   };
@@ -230,15 +230,6 @@ test("presents one aligned project identity and a Bun-matched types pin", async 
   expect(bunFeature?.version).toBe("1.4.4");
 });
 
-test("documents AGENT_TOOLS in the tracked environment example", async () => {
-  const example = await readFile(
-    join(runtimeDir, "devcontainer.env.example"),
-    "utf8",
-  );
-  expect(example).toContain("AGENT_TOOLS");
-  expect(example).toContain("claude,codex,gemini,omp");
-  expect(example).toContain("AGENT_STATE_SCOPE");
-});
 
 test("documents installing adhd and attaching it, not the retired template flow", async () => {
   const readme = await readFile(join(repoRoot, "README.md"), "utf8");

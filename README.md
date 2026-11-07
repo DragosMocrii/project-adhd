@@ -5,21 +5,21 @@
 </p>
 
 An agentic Dev Container you attach to any Git repository. It installs your
-choice of agent CLIs, wires them to the RTK token-optimizing proxy and the
-Superpowers plugin, and keeps logins and plugins in Docker volumes shared by
-every repository you attach it to — so you authenticate once, not once per
-project.
+choice of agent CLIs, wires supported agents to the RTK token-optimizing proxy
+and Superpowers plugin, and keeps supported credentials and settings in Docker
+volumes shared by every repository you attach it to.
 
 **What you get**
 
 - `adhd`, a small host CLI: `attach`, `detach`, `update`, `new`, `herdr`,
   `devcontainer`, `version`.
 - A digest-pinned Dev Container with Bun, Node, `python3`, and the GitHub CLI.
-- Your choice of Claude Code, Codex, Gemini CLI, and OMP — see `AGENT_TOOLS`.
-- RTK configured as a hook for each selected agent.
+- Your choice of Claude Code, Codex, OMP, and the Antigravity CLI (`agy`) —
+  see `AGENT_TOOLS`.
+- RTK configured for supported selected agents.
 - [Herdr](https://herdr.dev), with sound notifications on your host by running
   its client locally — see [Herdr on the host](#herdr-on-the-host).
-- The Superpowers plugin and the Archify skill installed per agent.
+- The Superpowers plugin and the Archify skill installed for supported agents.
 - One container per repository (and per worktree); several can run at once.
 - Nothing committed to the repository you attach to.
 
@@ -68,14 +68,21 @@ setup:
 gh auth login        # always
 claude auth login    # if claude is in AGENT_TOOLS
 codex login          # if codex is in AGENT_TOOLS
-gemini               # start once and sign in, if gemini is in AGENT_TOOLS
 bash .devcontainer/project-adhd/post-create.sh
 .devcontainer/project-adhd/verify.sh
 ```
 
-Every repository you attach afterwards finds those logins already in place.
-`verify.sh` reports `SKIP` for unselected tools and a failure for a selected
-tool that is not configured yet.
+The existing Gemini volume persists Antigravity preferences and follows
+`AGENT_STATE_SCOPE`, but Antigravity OAuth credentials use an OS keyring and
+are not guaranteed to persist with the current configuration. See the
+[official Antigravity authentication documentation](https://antigravity.google/docs/install?surface=cli).
+For headless authentication, configure
+`"modelProvider": "gemini"` in
+`~/.gemini/antigravity-cli/settings.json` and export `GEMINI_API_KEY` inside
+the container. The key is not configured or stored by project-adhd.
+
+`verify.sh` reports `SKIP` for unselected tools and checks that each selected
+CLI is available; it does not verify authentication.
 
 **What `attach` writes.** Everything lives in
 `.devcontainer/project-adhd/`, which contains a `.gitignore` of `*` so git
@@ -123,21 +130,31 @@ Nothing is committed for you.
 
 `AGENT_TOOLS` in `.devcontainer/project-adhd/devcontainer.env` controls which
 agent CLIs are installed and verified. `adhd attach --agents` sets it; without
-the flag, `attach` asks, or selects all four when it cannot ask.
+the flag, `attach` asks, or selects all available tools when it cannot ask.
 
 ```bash
-AGENT_TOOLS=claude          # Claude Code only
-AGENT_TOOLS=claude,codex    # Claude Code and Codex
+adhd attach <dir> --agents antigravity  # installs the Antigravity CLI (`agy`)
+AGENT_TOOLS=claude                     # Claude Code only
+AGENT_TOOLS=claude,codex               # Claude Code and Codex
 ```
 
-Empty selects all four; an unrecognized value fails the run. `rtk`, the
-GitHub CLI, and Herdr are always installed. Changing it later requires **Dev Containers:
-Rebuild Container**, then `bash .devcontainer/project-adhd/post-create.sh`.
+Empty selects all available tools; an unrecognized value fails the run. `rtk`,
+the GitHub CLI, and Herdr are always installed. Changing it later requires
+**Dev Containers: Rebuild Container**, then
+`bash .devcontainer/project-adhd/post-create.sh`.
+
+The Gemini CLI is no longer selectable; use `antigravity` instead. Existing
+environment files whose `AGENT_TOOLS` value includes `gemini` must remove it
+before rebuilding. This removes the Gemini CLI, not Antigravity's Gemini
+provider option for headless API-key authentication.
+
+Antigravity settings share the existing `~/.gemini` volume and follow
+`AGENT_STATE_SCOPE`; OAuth keyring persistence is not configured. The supported
+headless option and authentication boundary are described above.
 
 - **OMP Superpowers requires Claude.** OMP sources the Superpowers package from
   Claude's installed plugin, so `omp` needs `claude` selected and
   authenticated; otherwise its Superpowers step is skipped with a message.
-- **Gemini CLI has no RTK integration** and no Archify destination.
 
 ## Herdr on the host
 

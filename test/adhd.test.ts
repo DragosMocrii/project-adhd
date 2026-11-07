@@ -84,10 +84,25 @@ test("attach selects every agent when --agents is omitted and stdin is not a ter
     expect((await adhd(checkout, ["attach", root], parent)).exitCode).toBe(0);
 
     expect(await readFile(join(root, RUNTIME, "devcontainer.env"), "utf8")).toMatch(
-      /^AGENT_TOOLS=claude,codex,gemini,omp$/m,
+      /^AGENT_TOOLS=claude,codex,omp,antigravity$/m,
     );
   });
 });
+test("attach accepts mixed-case Antigravity selection and writes its normalized name", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout } = await makeInstallation(parent);
+    const root = join(parent, "antigravity");
+    await makeRepo(root);
+
+    const result = await adhd(checkout, ["attach", root, "--agents", "ANTIGRAVITY"], parent);
+
+    expect(result.exitCode).toBe(0);
+    expect(await readFile(join(root, RUNTIME, "devcontainer.env"), "utf8")).toMatch(
+      /^AGENT_TOOLS=antigravity$/m,
+    );
+  });
+});
+
 
 test("attach resolves . and a trailing-slash path to the same worktree root", async () => {
   await withTemporaryParent(async (parent) => {
@@ -163,16 +178,16 @@ test("attach refuses a runtime folder it did not create", async () => {
   });
 });
 
-test("attach rejects an unknown agent before changing anything", async () => {
+test("attach rejects Gemini CLI before changing anything", async () => {
   await withTemporaryParent(async (parent) => {
     const { checkout } = await makeInstallation(parent);
-    const root = join(parent, "bad-agent");
+    const root = join(parent, "deprecated-gemini");
     await makeRepo(root);
 
-    const result = await adhd(checkout, ["attach", root, "--agents", "claude,foo"], parent);
+    const result = await adhd(checkout, ["attach", root, "--agents", "gemini"], parent);
 
     expect(result.exitCode).not.toBe(0);
-    expect(result.stderr).toContain("unknown tool 'foo'");
+    expect(result.stderr).toContain("unknown tool 'gemini'");
     expect(existsSync(join(root, RUNTIME))).toBe(false);
   });
 });

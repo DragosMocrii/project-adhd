@@ -5,7 +5,7 @@
 # AGENT_TOOLS is a comma-separated list drawn from AGENT_TOOLS_KNOWN.
 # Unset or empty selects every known tool.
 
-AGENT_TOOLS_KNOWN=(claude codex gemini omp)
+AGENT_TOOLS_KNOWN=(claude codex omp antigravity)
 AGENT_TOOLS_SELECTED=()
 
 agent_tools_die() {

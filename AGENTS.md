@@ -263,10 +263,10 @@ The generated release PR is the source of the proposed version.
 ## AGENT_TOOLS
 
 `AGENT_TOOLS` selects which agent CLIs are installed and verified —
-comma-separated from `claude`, `codex`, `gemini`, `omp`; unset means all four.
-`rtk`, `gh`, and Herdr are always installed. `adhd herdr` runs a Herdr client
-on the host and connects to the Herdr server in the Dev Container. OMP
-Superpowers requires `claude` selected and authenticated.
+comma-separated from `claude`, `codex`, `omp`, `antigravity`; unset means all
+available tools. `rtk`, `gh`, and Herdr are always installed.
+`adhd herdr` runs a Herdr client on the host and connects to the Herdr server
+in the Dev Container. OMP Superpowers requires `claude` selected and authenticated.
 
 ## Verifying a change
 
