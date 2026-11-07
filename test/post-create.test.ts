@@ -76,9 +76,9 @@ test("runs pre-login post-create successfully while still installing auth-free A
       gh: "#!/bin/sh\nif [ \"$1\" = auth ] && [ \"$2\" = status ]; then exit 1; fi\nexit 0\n",
       claude: "#!/bin/sh\nif [ \"$1\" = auth ] && [ \"$2\" = status ]; then exit 1; fi\nexit 0\n",
       codex: "#!/bin/sh\nif [ \"$1\" = login ] && [ \"$2\" = status ]; then exit 1; fi\nexit 0\n",
-      gemini: "#!/bin/sh\nexit 0\n",
       rtk: "#!/bin/sh\nexit 0\n",
       omp: "#!/bin/sh\nexit 0\n",
+      agy: "#!/bin/sh\nexit 0\n",
       herdr: "#!/bin/sh\nexit 0\n",
     };
     await writeStubs(stubBin, stubs);
@@ -103,46 +103,6 @@ test("runs pre-login post-create successfully while still installing auth-free A
   });
 });
 
-test("installs Gemini CLI globally when the command is missing", async () => {
-  await withTemporaryParent(async (parent) => {
-    const { home, stubBin } = await makeHome(parent);
-    const marker = join(parent, "gemini-install-args");
-    const trustMarker = join(parent, "omp-trust-args");
-    const trustStage = join(parent, "omp-trust-stage");
-
-    const stubs: Record<string, string> = {
-      claude: "#!/bin/sh\nexit 0\n",
-      codex: "#!/bin/sh\nexit 0\n",
-      omp: "#!/bin/sh\nexit 0\n",
-      rtk: "#!/bin/sh\nexit 0\n",
-      herdr: "#!/bin/sh\nexit 0\n",
-      npm: "#!/bin/sh\nprintf '%s|%s' \"$NPM_CONFIG_PREFIX\" \"$*\" > \"$GEMINI_INSTALL_MARKER\"\n",
-      bun: "#!/bin/sh\ncase \"$*\" in\n  'pm -g untrusted')\n    if [ -f \"$OMP_TRUST_STAGE\" ]; then printf 'sharp\\n'; else printf 'onnxruntime-node\\nprotobufjs\\n'; fi\n    ;;\n  *)\n    printf '%s\\n' \"$*\" >> \"$OMP_TRUST_MARKER\"\n    : > \"$OMP_TRUST_STAGE\"\n    ;;\nesac\n",
-    };
-    await writeStubs(stubBin, stubs);
-
-    const result = await run(
-      ["/bin/bash", "-c", 'source "$1"; agent_tools_init; install_tools', "scaffold-installer", postCreatePath],
-      home,
-      {
-        HOME: home,
-        HERDR_SSHD: "/bin/sh",
-        PATH: stubBin,
-        GEMINI_INSTALL_MARKER: marker,
-        OMP_TRUST_MARKER: trustMarker,
-        OMP_TRUST_STAGE: trustStage,
-      },
-    );
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("==> Installing Gemini CLI");
-    expect(await readFile(marker, "utf8")).toBe(
-      `${join(home, ".local")}|install -g --allow-scripts=@github/keytar @google/gemini-cli`,
-    );
-    expect(await readFile(trustMarker, "utf8")).toBe(
-      "pm -g trust onnxruntime-node\npm -g trust protobufjs\npm -g trust sharp\n",
-    );
-  });
-});
 
 async function runInstallTools(
   home: string,
@@ -160,12 +120,66 @@ async function runInstallTools(
 const preinstalledAgents: Record<string, string> = {
   claude: "#!/bin/sh\nexit 0\n",
   codex: "#!/bin/sh\nexit 0\n",
-  gemini: "#!/bin/sh\nexit 0\n",
   omp: "#!/bin/sh\nexit 0\n",
+  agy: "#!/bin/sh\nexit 0\n",
   rtk: "#!/bin/sh\nexit 0\n",
   bun: "#!/bin/sh\nexit 0\n",
 };
 
+test("installs selected Antigravity CLI once and verifies the installed executable", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { home, stubBin } = await makeHome(parent);
+    await writeStubs(stubBin, {
+      rtk: "#!/bin/sh\nexit 0\n",
+      herdr: "#!/bin/sh\nexit 0\n",
+      curl: "#!/bin/sh\nprintf 'mkdir -p \"$HOME/.local/bin\"\\nprintf \"#!/bin/sh\\\\necho agy-test\\\\n\" > \"$HOME/.local/bin/agy\"\\nchmod +x \"$HOME/.local/bin/agy\"\\n'\n",
+    });
+    const command = [
+      "/bin/bash",
+      "-c",
+      'source "$1"; agent_tools_init; install_tools; command -v agy; agy; install_tools',
+      "antigravity-installer-test",
+      postCreatePath,
+    ];
+    const result = await run(command, home, {
+      HOME: home,
+      PATH: `${stubBin}:/usr/bin:/bin`,
+      HERDR_SSHD: "/bin/sh",
+      AGENT_TOOLS: "antigravity",
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("==> Installing Antigravity CLI");
+    expect(result.stdout).toContain("agy-test");
+    expect(result.stdout).toContain("==> Antigravity CLI is already installed; skipping Antigravity installer");
+  });
+});
+
+test("propagates Antigravity installer failures", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { home, stubBin } = await makeHome(parent);
+    await writeStubs(stubBin, {
+      rtk: "#!/bin/sh\nexit 0\n",
+      herdr: "#!/bin/sh\nexit 0\n",
+      curl: "#!/bin/sh\necho 'installer unavailable' >&2\nexit 23\n",
+      bash: "#!/bin/sh\nexit 24\n",
+    });
+
+    const result = await run(
+      ["/bin/bash", "-c", 'source "$1"; agent_tools_init; install_tools', "antigravity-failure-test", postCreatePath],
+      home,
+      {
+        HOME: home,
+        PATH: `${stubBin}:/usr/bin:/bin`,
+        HERDR_SSHD: "/bin/sh",
+        AGENT_TOOLS: "antigravity",
+      },
+    );
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("installer unavailable");
+  });
+});
 test("installs Herdr and its remote SSH server without installing an audio player", async () => {
   await withTemporaryParent(async (parent) => {
     const { home, stubBin } = await makeHome(parent);
@@ -218,7 +232,7 @@ test("reinstalls RTK when the existing binary fails the RTK identity check", asy
       claude: "#!/bin/sh\nexit 0\n",
       codex: "#!/bin/sh\nexit 0\n",
       omp: "#!/bin/sh\nexit 0\n",
-      gemini: "#!/bin/sh\nexit 0\n",
+      agy: "#!/bin/sh\nexit 0\n",
       herdr: "#!/bin/sh\nexit 0\n",
       rtk: "#!/bin/sh\nif [ \"$1\" = gain ]; then exit 1; fi\nexit 0\n",
       curl: "#!/bin/sh\ncase \"$*\" in\n  *rtk-ai/rtk/*) printf 'printf installed > \"$RTK_INSTALL_MARKER\"\\n';;\n  *) echo 'unexpected installer invoked' >&2; exit 42;;\nesac\n",
@@ -247,8 +261,8 @@ test("installs and configures only the selected agent tool", async () => {
     const { home, stubBin } = await makeHome(parent);
     const npmMarker = join(parent, "npm-invoked");
 
-    // No codex, gemini, or omp stubs: if gating leaks, their installers run
-    // and the curl/npm stubs below fail the run.
+    // No codex, omp, or Antigravity stubs: if gating leaks, their installers
+    // run and the curl/npm stubs below fail the run.
     const stubs: Record<string, string> = {
       curl: "#!/bin/sh\necho 'no installer may run for an unselected tool' >&2\nexit 42\n",
       npm: `#!/bin/sh\nprintf '%s\\n' "$*" > ${JSON.stringify(npmMarker)}\nexit 42\n`,

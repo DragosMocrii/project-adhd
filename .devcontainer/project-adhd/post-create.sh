@@ -147,15 +147,6 @@ install_tools() {
     fi
   fi
 
-  if agent_tool_selected gemini; then
-    if command -v gemini >/dev/null 2>&1; then
-      echo '==> Gemini CLI is already installed; skipping Gemini installer'
-    else
-      echo '==> Installing Gemini CLI'
-      npm install -g --allow-scripts=@github/keytar @google/gemini-cli
-    fi
-  fi
-
   # Herdr is not an agent CLI, so AGENT_TOOLS does not gate it.
   if command -v herdr >/dev/null 2>&1; then
     echo '==> Herdr is already installed; skipping Herdr installer'
@@ -177,6 +168,15 @@ install_tools() {
     echo '==> Trusting OMP runtime dependencies'
     trust_omp_dependencies
   fi
+
+  if agent_tool_selected antigravity; then
+    if command -v agy >/dev/null 2>&1; then
+      echo '==> Antigravity CLI is already installed; skipping Antigravity installer'
+    else
+      echo '==> Installing Antigravity CLI'
+      curl -fsSL https://antigravity.google/cli/install.sh | bash
+    fi
+  fi
 }
 
 configure_rtk() {
@@ -195,7 +195,6 @@ configure_rtk() {
     PI_CODING_AGENT_DIR="$HOME/.omp/agent" rtk init -g --agent pi
   fi
 
-  # Gemini CLI has no rtk integration yet; skipping it is intentional.
 }
 
 parse_claude_plugin_field() {

@@ -58,7 +58,8 @@ choose_agents() {
     return 0
   fi
   if (( agents_given == 0 )) && [[ -t 0 ]]; then
-    printf 'Agent tools to install, comma-separated from claude, codex, gemini, omp [all]: ' >&2
+    printf 'Agent tools to install, comma-separated from %s [all]: ' \
+      "$(agent_tools_join "${AGENT_TOOLS_KNOWN[@]}")" >&2
     IFS= read -r answer || answer=
     agents=$answer
   fi

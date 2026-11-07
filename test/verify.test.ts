@@ -76,7 +76,6 @@ const baseStubs: Record<string, string> = {
   gh: noop,
   rtk: noop,
   herdr: noop,
-  gemini: noop,
   tr: trStub,
 };
 
@@ -85,8 +84,8 @@ test("verify skips checks for unselected tools and succeeds", async () => {
     const noop = "#!/bin/sh\nexit 0\n";
     const result = await runVerify(
       parent,
-      { bun: noop, node: noop, python3: noop, gh: noop, rtk: noop, herdr: noop, gemini: noop, tr: trStub },
-      "gemini",
+      { bun: noop, node: noop, python3: noop, gh: noop, rtk: noop, herdr: noop, agy: noop, tr: trStub },
+      "antigravity",
     );
 
     expect(result.exitCode).toBe(0);
@@ -96,12 +95,34 @@ test("verify skips checks for unselected tools and succeeds", async () => {
   });
 });
 
+test("verify maps selected Antigravity to agy rather than antigravity", async () => {
+  await withTemporaryParent(async (parent) => {
+    const result = await runVerify(parent, { ...baseStubs, agy: noop }, "antigravity");
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("selected agent tools: antigravity");
+  });
+});
+
+test("verify requires agy when Antigravity is selected", async () => {
+  await withTemporaryParent(async (parent) => {
+    const result = await runVerify(
+      parent,
+      { ...baseStubs, antigravity: noop },
+      "antigravity",
+    );
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("required command is not on PATH: agy");
+  });
+});
+
 test("verify fails when a selected tool is missing from PATH", async () => {
   await withTemporaryParent(async (parent) => {
     const noop = "#!/bin/sh\nexit 0\n";
     const result = await runVerify(
       parent,
-      { bun: noop, node: noop, python3: noop, gh: noop, rtk: noop, herdr: noop, gemini: noop, tr: trStub },
+      { bun: noop, node: noop, python3: noop, gh: noop, rtk: noop, herdr: noop, tr: trStub },
       "codex",
     );
 
@@ -113,8 +134,7 @@ test("verify fails when a selected tool is missing from PATH", async () => {
 test("verify fails when herdr is missing from PATH", async () => {
   await withTemporaryParent(async (parent) => {
     const { herdr: _herdr, ...stubs } = baseStubs;
-    const result = await runVerify(parent, stubs, "gemini");
-
+    const result = await runVerify(parent, { ...stubs, agy: noop }, "antigravity");
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toContain("required command is not on PATH: herdr");
   });
@@ -124,7 +144,7 @@ test("verify fails when herdr is missing from PATH", async () => {
 test("verify fails when the sshd for adhd herdr is missing", async () => {
   await withTemporaryParent(async (parent) => {
     const sshd = join(parent, "missing-sshd");
-    const result = await runVerify(parent, baseStubs, "gemini", { HERDR_SSHD: sshd });
+    const result = await runVerify(parent, { ...baseStubs, agy: noop }, "antigravity", { HERDR_SSHD: sshd });
 
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toContain(`sshd for adhd herdr is missing: ${sshd}`);

@@ -219,7 +219,9 @@ main() {
 
   for tool in "${AGENT_TOOLS_KNOWN[@]}"; do
     if agent_tool_selected "$tool"; then
-      require_command "$tool"
+      command_name=$tool
+      case "$tool" in antigravity) command_name=agy ;; esac
+      require_command "$command_name"
       record_pass
     else
       unselected+=("$tool")

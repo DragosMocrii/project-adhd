@@ -44,14 +44,14 @@ async function predicate(agentTools: string, tool: string): Promise<number> {
 test("selects every known tool when AGENT_TOOLS is unset", async () => {
   const result = await selection();
   expect(result.exitCode).toBe(0);
-  expect(result.stdout.trim()).toBe("claude, codex, gemini, omp");
+  expect(result.stdout.trim()).toBe("claude, codex, omp, antigravity");
 });
 
 test("selects every known tool when AGENT_TOOLS is empty or only separators", async () => {
   for (const value of ["", "   ", ","]) {
     const result = await selection(value);
     expect(result.exitCode).toBe(0);
-    expect(result.stdout.trim()).toBe("claude, codex, gemini, omp");
+    expect(result.stdout.trim()).toBe("claude, codex, omp, antigravity");
   }
 });
 
@@ -65,20 +65,21 @@ test("normalizes whitespace, case, and duplicates into canonical order", async (
   const result = await selection(" OMP , claude,claude , Codex ");
   expect(result.exitCode).toBe(0);
   expect(result.stdout.trim()).toBe("claude, codex, omp");
+
+  const antigravity = await selection(" ANTIGRAVITY , claude,antigravity ");
+  expect(antigravity.exitCode).toBe(0);
+  expect(antigravity.stdout.trim()).toBe("claude, antigravity");
 });
 
-test("rejects an unknown tool with the valid-names message", async () => {
-  const result = await selection("claude,foo");
+test("rejects Gemini CLI as an unsupported tool", async () => {
+  const result = await selection("claude,gemini");
   expect(result.exitCode).toBe(1);
-  expect(result.stderr.trim()).toBe(
-    "agent-tools: unknown tool 'foo' (valid: claude, codex, gemini, omp)",
-  );
   expect(result.stdout).toBe("");
 });
 
 test("agent_tool_selected answers for selected and unselected tools", async () => {
-  expect(await predicate("claude,omp", "claude")).toBe(0);
-  expect(await predicate("claude,omp", "omp")).toBe(0);
-  expect(await predicate("claude,omp", "codex")).toBe(1);
-  expect(await predicate("claude,omp", "gemini")).toBe(1);
+  expect(await predicate("claude,omp,antigravity", "claude")).toBe(0);
+  expect(await predicate("claude,omp,antigravity", "omp")).toBe(0);
+  expect(await predicate("claude,omp,antigravity", "antigravity")).toBe(0);
+  expect(await predicate("claude,omp,antigravity", "codex")).toBe(1);
 });

@@ -15,7 +15,7 @@ and on every manual rerun. It fetches and executes the following, as the
 | Claude Code installer | `https://claude.ai/install.sh` | `curl \| bash` |
 | RTK installer | `https://raw.githubusercontent.com/rtk-ai/rtk/` | `curl \| sh` |
 | Codex installer | `https://chatgpt.com/codex/install.sh` | `curl \| sh` |
-| Gemini CLI | npm registry (`@google/gemini-cli`) | `npm install -g` |
+| Antigravity CLI | `https://antigravity.google/cli/install.sh` | `curl | bash` |
 | OMP | npm registry (`@oh-my-pi/pi-coding-agent`) | `bun install -g` |
 | Archify skill | `bunx skills@latest add tt-a1i/archify` | `bunx` |
 | Herdr installer | `https://herdr.dev/install.sh` | `curl \| sh` |
@@ -93,6 +93,11 @@ volumes that persist across rebuilds:
 - shared by every attached repository: `project-adhd-shared-claude`, `-gh`,
   `-rtk-config`, `-codex`, `-gemini`, `-omp`, `-lock`
 - per repository: `<prefix>-rtk-data`
+
+Antigravity preferences share the mounted `~/.gemini` volume, but OAuth
+credentials use an OS keyring and are not guaranteed to persist with this
+configuration. See the
+[official Antigravity authentication documentation](https://antigravity.google/docs/install?surface=cli).
 
 **Sharing is the default.** Code running in any attached repository's
 container — a dependency's install script, a test fixture — can read every
