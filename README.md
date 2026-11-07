@@ -11,8 +11,8 @@ volumes shared by every repository you attach it to.
 
 **What you get**
 
-- `adhd`, a small host CLI: `attach`, `detach`, `update`, `new`, `herdr`,
-  `devcontainer`, `version`.
+- `adhd`, a small host CLI: `attach`, `detach`, `refresh`, `update`, `new`,
+  `herdr`, `devcontainer`, `version`.
 - A digest-pinned Dev Container with Bun, Node, `python3`, and the GitHub CLI.
 - Your choice of Claude Code, Codex, OMP, and the Antigravity CLI (`agy`) —
   see `AGENT_TOOLS`.
@@ -223,9 +223,18 @@ does not remove any volume.
 ## Updating and customizing
 
 ```bash
-adhd update              # move to the newest project-adhd release
-adhd attach <dir>        # refresh an attached repository
+adhd update              # move this installation to the newest release
+adhd refresh [dir]       # apply it to an attached repository (default: .)
+adhd refresh --dry-run   # list what would change, and change nothing
 ```
+
+`update` changes only your adhd installation; `refresh` brings one attached
+repository up to the installed version. In tracked mode, `refresh` refuses to
+run while `.devcontainer/project-adhd/` has uncommitted changes, so the
+refresh shows up as its own reviewable diff; `--force` skips that check.
+For scripting and agent workflows, `--porcelain` prints stable tab-separated
+records (`<action>\t<file>[\t<detail>]`) and exits with code `3` if any conflicts
+or manual reviews remain.
 
 ### Versions and channels
 
@@ -259,9 +268,21 @@ Container Feature for a toolchain to `devcontainer.json`:
 "ghcr.io/devcontainers/features/go:1": {}
 ```
 
-`attach` never overwrites a file you edited. When a new version of it ships,
-it writes that version beside it as `<file>.adhd-new` and warns once, so you
-can merge by hand; later refreshes stay quiet until another version ships.
+`refresh` (and rerunning `attach`) never overwrites a file you edited. When a
+new version of it ships, adhd three-way merges your edits with the new version,
+using the version you last received as the base:
+
+- **merged** — the changes do not overlap; your file now has both.
+- **conflict** — your file is left as is, and the merge, with git-style
+  conflict markers, is written beside it as `<file>.adhd-new`. The report shows
+  how many conflicted hunks occurred (`conflict <file> -> <file>.adhd-new (N hunks)`).
+- **review** — if the previous version cannot be found in the installation's
+  history (for example, it was refreshed from a checkout with uncommitted changes),
+  `<file>.adhd-new` holds the plain new version instead (`review <file> -> <file>.adhd-new (no base; compare by hand)`).
+
+Merge each `.adhd-new` into its file and delete it before the next refresh: a
+version is offered only once, and later refreshes stay quiet until another
+version ships. When conflicts or manual reviews exist, `adhd refresh` exits with code `3`.
 
 ## Detaching
 

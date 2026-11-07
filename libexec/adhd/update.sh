@@ -51,5 +51,5 @@ cmd_update() {
   if tag=$(git -C "$ADHD_HOME" describe --tags --exact-match HEAD 2>/dev/null); then
     printf 'Release notes: %s/tag/%s\n' "$ADHD_RELEASES_URL" "$tag"
   fi
-  printf 'Rerun "adhd attach <dir>" in each attached repository to refresh it.\n'
+  printf 'Run "adhd refresh" in each attached repository to apply it.\n'
 }
