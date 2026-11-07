@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.11](https://github.com/DragosMocrii/project-adhd/compare/v0.1.10...v0.1.11) (2026-11-07)
+
+
+### Features
+
+* **agents:** replace Gemini CLI with Antigravity ([87c9c4d](https://github.com/DragosMocrii/project-adhd/commit/87c9c4d73d6854eb0c980360ccb8d86fcb7fc2f7))
+
 ## [0.1.10](https://github.com/DragosMocrii/project-adhd/compare/v0.1.9...v0.1.10) (2026-11-02)
 
 
