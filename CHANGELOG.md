@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.12](https://github.com/DragosMocrii/project-adhd/compare/v0.1.11...v0.1.12) (2026-11-07)
+
+
+### Features
+
+* **refresh:** add adhd refresh to apply updates and merge edited runtime files ([fbf3eb7](https://github.com/DragosMocrii/project-adhd/commit/fbf3eb7084c1ab3eec7fb23329391c01a2342f3c))
+
 ## [0.1.11](https://github.com/DragosMocrii/project-adhd/compare/v0.1.10...v0.1.11) (2026-11-07)
 
 
