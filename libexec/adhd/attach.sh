@@ -9,7 +9,8 @@ usage: adhd attach <dir | owner/repo | url> [--agents <list>] [--track]
 
 Copies the project-adhd Dev Container into <dir>/.devcontainer/project-adhd/.
 By default it is hidden from git; --track makes it part of the repository.
-owner/repo and GitHub URLs are cloned with gh first. Rerun to refresh.
+owner/repo and GitHub URLs are cloned with gh first. To bring in a newer
+project-adhd later, run: adhd refresh <dir>
 EOF
 }
 
@@ -67,110 +68,6 @@ choose_agents() {
   ATTACH_AGENTS=$(selected_agents_csv)
 }
 
-in_manifest() {
-  local candidate=$1 file
-
-  for file in "${ADHD_RUNTIME_FILES[@]}"; do
-    [[ "$file" == "$candidate" ]] && return 0
-  done
-  return 1
-}
-
-# copy_runtime <runtime> <marker>: copies every runtime file and prints its sha
-# line. A file the user edited is kept; a new shipped version is written beside
-# it as <file>.adhd-new, and its sha is recorded so it is offered only once.
-copy_runtime() {
-  local runtime=$1 marker=$2 file source destination recorded='' shipped current
-
-  for file in "${ADHD_RUNTIME_FILES[@]}"; do
-    source="$ADHD_RUNTIME_SOURCE/$file"
-    destination="$runtime/$file"
-    [[ -f "$source" ]] || die "the installation is incomplete (missing $source); run: adhd update"
-    mkdir -p "$(dirname "$destination")"
-    shipped=$(file_sha256 "$source")
-    if [[ ! -f "$destination" ]]; then
-      cp -p "$source" "$destination"
-      printf 'sha:%s=%s\n' "$file" "$shipped"
-      continue
-    fi
-    current=$(file_sha256 "$destination")
-    recorded=$(marker_get "$marker" "sha:$file") || recorded=''
-    if [[ "$current" == "$shipped" ]]; then
-      rm -f -- "$destination.adhd-new"
-    elif [[ "$current" == "$recorded" ]]; then
-      cp -p "$source" "$destination"
-    elif [[ "$shipped" != "$recorded" ]]; then
-      cp -p "$source" "$destination.adhd-new"
-      warn "kept your edited $ADHD_RUNTIME_REL/$file; the new version is $file.adhd-new"
-    fi
-    # Otherwise the user edited it and nothing new shipped: keep it silently.
-    printf 'sha:%s=%s\n' "$file" "$shipped"
-  done
-}
-
-# prune_removed <runtime> <marker>: deletes files the marker lists that are no
-# longer in the manifest, unless the user edited them.
-prune_removed() {
-  local runtime=$1 marker=$2 line file recorded
-
-  [[ -f "$marker" ]] || return 0
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    case "$line" in
-      sha:*) ;;
-      *) continue ;;
-    esac
-    file=${line#sha:}
-    file=${file%%=*}
-    recorded=${line#*=}
-    in_manifest "$file" && continue
-    [[ -f "$runtime/$file" ]] || continue
-    if [[ "$(file_sha256 "$runtime/$file")" == "$recorded" ]]; then
-      rm -f -- "$runtime/$file"
-    else
-      warn "kept $ADHD_RUNTIME_REL/$file: project-adhd no longer ships it, but you edited it"
-    fi
-  done < "$marker"
-}
-
-# write_marker <runtime> <mode> <version>: refreshes the runtime and records what was written.
-write_marker() {
-  local runtime=$1 mode=$2 version=$3 marker="$1/.adhd" body revision
-
-  body=$(mktemp "$runtime/.adhd.XXXXXX") || die "unable to create a temporary file in $runtime"
-  ATTACH_MARKER_TEMP=$body
-  revision=$(git -C "$ADHD_HOME" rev-parse HEAD 2>/dev/null) || revision=unknown
-  {
-    printf 'mode=%s\n' "$mode"
-    printf 'source=%s\n' "$revision"
-    printf 'version=%s\n' "$version"
-    copy_runtime "$runtime" "$marker"
-  } > "$body"
-  prune_removed "$runtime" "$marker"
-  mv -f -- "$body" "$marker"
-  ATTACH_MARKER_TEMP=''
-}
-
-# write_ignore_rules <root> <runtime> <mode>
-write_ignore_rules() {
-  local root=$1 runtime=$2 mode=$3 common
-
-  case "$mode" in
-    untracked)
-      printf '*\n' > "$runtime/.gitignore"
-      common=$(git_common_dir "$root")
-      mkdir -p "$common/info"
-      write_block "$common/info/exclude"
-      ;;
-    tracked)
-      printf '%s' "$ADHD_TRACKED_GITIGNORE" > "$runtime/.gitignore"
-      write_block "$root/.gitignore"
-      ;;
-    *)
-      die "unknown attach mode: $mode"
-      ;;
-  esac
-}
-
 # write_devcontainer_env <runtime> <agents>: creates devcontainer.env from the
 # example; does nothing when <agents> is empty (the file already exists).
 write_devcontainer_env() {
@@ -198,7 +95,6 @@ print_next_steps() {
 # Cleanup state for a failed attach; see attach_cleanup.
 ATTACH_RUNTIME=''
 ATTACH_CREATED_RUNTIME=0
-ATTACH_MARKER_TEMP=''
 
 # attach_cleanup: the EXIT trap. On failure it removes the marker temp file and,
 # when this run created the runtime folder, the folder itself, so a failed
@@ -207,8 +103,8 @@ attach_cleanup() {
   local status=$?
 
   (( status != 0 )) || return 0
-  if [[ -n "$ATTACH_MARKER_TEMP" ]]; then
-    rm -f -- "$ATTACH_MARKER_TEMP"
+  if [[ -n "$ADHD_MARKER_TEMP" ]]; then
+    rm -f -- "$ADHD_MARKER_TEMP"
   fi
   if (( ATTACH_CREATED_RUNTIME )); then
     rm -rf -- "$ATTACH_RUNTIME"

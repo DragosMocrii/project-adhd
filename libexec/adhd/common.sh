@@ -152,6 +152,216 @@ write_block() {
   } >> "$file"
 }
 
+# Runtime sync, shared by attach and refresh. Set ADHD_SYNC_DRY_RUN=1 to
+# report what would change without writing anything into the repository.
+ADHD_SYNC_DRY_RUN=0
+# Marker temp file of a sync in progress; the callers' EXIT traps remove it.
+ADHD_MARKER_TEMP=''
+# Set ADHD_SYNC_PORCELAIN=1 for stable, tab-separated output.
+ADHD_SYNC_PORCELAIN=0
+# Counts of the lines sync_report printed during this run.
+ADHD_SYNC_CHANGES=0
+ADHD_SYNC_CONFLICTS=0
+
+# sync_report <action> <file> [detail]: prints one line of the change list.
+# In porcelain mode: <action>\t<file>[\t<detail>]
+# In human mode:
+#   action file
+#   action file -> detail
+sync_report() {
+  local action=$1 file=$2 detail=${3-}
+  ADHD_SYNC_CHANGES=$((ADHD_SYNC_CHANGES + 1))
+  case "$action" in
+    conflict|review) ADHD_SYNC_CONFLICTS=$((ADHD_SYNC_CONFLICTS + 1)) ;;
+  esac
+  if (( ADHD_SYNC_PORCELAIN )); then
+    if [[ -n "$detail" ]]; then
+      printf '%s\t%s\t%s\n' "$action" "$file" "$detail"
+    else
+      printf '%s\t%s\n' "$action" "$file"
+    fi
+  else
+    if [[ -n "$detail" ]]; then
+      printf '  %-9s %s -> %s\n' "$action" "$file" "$detail"
+    else
+      printf '  %-9s %s\n' "$action" "$file"
+    fi
+  fi
+}
+
+in_manifest() {
+  local candidate=$1 file
+
+  for file in "${ADHD_RUNTIME_FILES[@]}"; do
+    [[ "$file" == "$candidate" ]] && return 0
+  done
+  return 1
+}
+
+# merge_runtime_file <file> <destination> <source> <marker> <version>: three-way
+# merges the user's <destination> with the newly shipped <source>. The base is
+# the version the marker's source= revision shipped, used only when its sha
+# matches the marker's sha:<file>. Sets ADHD_MERGE_RESULT to merged, conflict,
+# or nobase, and ADHD_MERGE_HUNKS to the conflict count. Unless dry-run, a clean
+# merge is written into <destination>; a conflict (with markers) or, without a
+# base, the plain new version is written to <destination>.adhd-new. The user's
+# file is never overwritten otherwise.
+merge_runtime_file() {
+  local file=$1 destination=$2 source=$3 marker=$4 version=$5 revision recorded base merged rc=0
+
+  ADHD_MERGE_RESULT=nobase
+  ADHD_MERGE_HUNKS=0
+  revision=$(marker_get "$marker" source) || revision=''
+  recorded=$(marker_get "$marker" "sha:$file") || recorded=''
+  base=$(mktemp "${TMPDIR:-/tmp}/adhd-base.XXXXXX") || die 'unable to create a temporary file'
+  merged=$(mktemp "${TMPDIR:-/tmp}/adhd-merged.XXXXXX") || die 'unable to create a temporary file'
+  if [[ -n "$revision" && "$revision" != unknown && -n "$recorded" ]] &&
+    git -C "$ADHD_HOME" show "$revision:$ADHD_RUNTIME_REL/$file" > "$base" 2>/dev/null &&
+    [[ "$(file_sha256 "$base")" == "$recorded" ]]; then
+    git merge-file -p -L yours -L 'adhd (previous)' -L "adhd $version" \
+      "$destination" "$base" "$source" > "$merged" 2>/dev/null || rc=$?
+    if (( rc == 0 )); then
+      ADHD_MERGE_RESULT=merged
+    elif (( rc > 0 && rc < 128 )); then
+      ADHD_MERGE_RESULT=conflict
+      ADHD_MERGE_HUNKS=$rc
+    fi
+  fi
+  if (( ADHD_SYNC_DRY_RUN == 0 )); then
+    case "$ADHD_MERGE_RESULT" in
+      merged)
+        cat "$merged" > "$destination"
+        rm -f -- "$destination.adhd-new"
+        ;;
+      conflict)
+        cp "$merged" "$destination.adhd-new"
+        ;;
+      *)
+        cp -p "$source" "$destination.adhd-new"
+        ;;
+    esac
+  fi
+  rm -f -- "$base" "$merged"
+}
+
+# copy_runtime <runtime> <marker> <body> <version>: brings every runtime file up
+# to date, appends its sha line to <body>, and prints the change list. A file
+# the user edited is merged with the new version (see merge_runtime_file); the
+# new sha is recorded either way, so a version is offered only once.
+copy_runtime() {
+  local runtime=$1 marker=$2 body=$3 version=$4 file source destination recorded='' shipped current
+
+  for file in "${ADHD_RUNTIME_FILES[@]}"; do
+    source="$ADHD_RUNTIME_SOURCE/$file"
+    destination="$runtime/$file"
+    [[ -f "$source" ]] || die "the installation is incomplete (missing $source); run: adhd update"
+    shipped=$(file_sha256 "$source")
+    printf 'sha:%s=%s\n' "$file" "$shipped" >> "$body"
+    if [[ ! -f "$destination" ]]; then
+      if (( ADHD_SYNC_DRY_RUN == 0 )); then
+        mkdir -p "$(dirname "$destination")"
+        cp -p "$source" "$destination"
+      fi
+      # A first attach adds everything; list additions only on a refresh.
+      [[ ! -f "$marker" ]] || sync_report added "$file"
+      continue
+    fi
+    current=$(file_sha256 "$destination")
+    recorded=$(marker_get "$marker" "sha:$file") || recorded=''
+    if [[ "$current" == "$shipped" ]]; then
+      (( ADHD_SYNC_DRY_RUN )) || rm -f -- "$destination.adhd-new"
+    elif [[ "$current" == "$recorded" ]]; then
+      (( ADHD_SYNC_DRY_RUN )) || cp -p "$source" "$destination"
+      sync_report updated "$file"
+    elif [[ "$shipped" != "$recorded" ]]; then
+      merge_runtime_file "$file" "$destination" "$source" "$marker" "$version"
+      if [[ "$ADHD_MERGE_RESULT" == merged ]]; then
+        sync_report merged "$file"
+      elif [[ "$ADHD_MERGE_RESULT" == conflict ]]; then
+        sync_report conflict "$file" "$file.adhd-new ($ADHD_MERGE_HUNKS hunk$([[ $ADHD_MERGE_HUNKS == 1 ]] || printf 's'))"
+        warn "kept your edited $ADHD_RUNTIME_REL/$file; merge $file.adhd-new into it"
+      else
+        sync_report review "$file" "$file.adhd-new (no base; compare by hand)"
+        warn "kept your edited $ADHD_RUNTIME_REL/$file; merge $file.adhd-new into it"
+      fi
+    fi
+    # Otherwise the user edited it and nothing new shipped: keep it silently.
+  done
+}
+
+# prune_removed <runtime> <marker>: deletes files the marker lists that are no
+# longer in the manifest, unless the user edited them.
+prune_removed() {
+  local runtime=$1 marker=$2 line file recorded
+
+  [[ -f "$marker" ]] || return 0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    case "$line" in
+      sha:*) ;;
+      *) continue ;;
+    esac
+    file=${line#sha:}
+    file=${file%%=*}
+    recorded=${line#*=}
+    in_manifest "$file" && continue
+    [[ -f "$runtime/$file" ]] || continue
+    if [[ "$(file_sha256 "$runtime/$file")" == "$recorded" ]]; then
+      (( ADHD_SYNC_DRY_RUN )) || rm -f -- "$runtime/$file"
+      sync_report removed "$file"
+    else
+      warn "kept $ADHD_RUNTIME_REL/$file: project-adhd no longer ships it, but you edited it"
+    fi
+  done < "$marker"
+}
+
+# write_marker <runtime> <mode> <version>: refreshes the runtime and records
+# what was written. In dry-run it only reports.
+write_marker() {
+  local runtime=$1 mode=$2 version=$3 marker="$1/.adhd" body revision
+
+  if (( ADHD_SYNC_DRY_RUN )); then
+    body=$(mktemp "${TMPDIR:-/tmp}/adhd-marker.XXXXXX") || die 'unable to create a temporary file'
+  else
+    body=$(mktemp "$runtime/.adhd.XXXXXX") || die "unable to create a temporary file in $runtime"
+  fi
+  ADHD_MARKER_TEMP=$body
+  revision=$(git -C "$ADHD_HOME" rev-parse HEAD 2>/dev/null) || revision=unknown
+  {
+    printf 'mode=%s\n' "$mode"
+    printf 'source=%s\n' "$revision"
+    printf 'version=%s\n' "$version"
+  } > "$body"
+  copy_runtime "$runtime" "$marker" "$body" "$version"
+  prune_removed "$runtime" "$marker"
+  if (( ADHD_SYNC_DRY_RUN )); then
+    rm -f -- "$body"
+  else
+    mv -f -- "$body" "$marker"
+  fi
+  ADHD_MARKER_TEMP=''
+}
+
+# write_ignore_rules <root> <runtime> <mode>
+write_ignore_rules() {
+  local root=$1 runtime=$2 mode=$3 common
+
+  case "$mode" in
+    untracked)
+      printf '*\n' > "$runtime/.gitignore"
+      common=$(git_common_dir "$root")
+      mkdir -p "$common/info"
+      write_block "$common/info/exclude"
+      ;;
+    tracked)
+      printf '%s' "$ADHD_TRACKED_GITIGNORE" > "$runtime/.gitignore"
+      write_block "$root/.gitignore"
+      ;;
+    *)
+      die "unknown attach mode: $mode"
+      ;;
+  esac
+}
+
 # validate_agents <list>: dies on an unknown tool; sets AGENT_TOOLS_SELECTED.
 validate_agents() {
   AGENT_TOOLS=$1 agent_tools_init

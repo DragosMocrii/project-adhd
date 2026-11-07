@@ -31,7 +31,8 @@ usage: adhd <command> [arguments]
 commands:
   attach <dir | owner/repo | url> [--agents <list>] [--track]
   detach [dir]
-  update [--ref <release|branch|tag>]
+  refresh [dir] [--dry-run] [--force]   apply the installed version to an attached repository
+  update [--ref <release|branch|tag>]   update this adhd installation
   new <name> [--public] [--agents <list>]
   herdr [dir] [-- <herdr arguments>]
   devcontainer <up|stop> [dir]
@@ -43,7 +44,7 @@ main() {
   local command=${1-}
 
   case "$command" in
-    attach|detach|update|new|herdr|devcontainer|version)
+    attach|detach|refresh|update|new|herdr|devcontainer|version)
       shift
       # shellcheck disable=SC1090
       source "$ADHD_HOME/libexec/adhd/$command.sh"

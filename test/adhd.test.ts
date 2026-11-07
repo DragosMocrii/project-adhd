@@ -234,30 +234,37 @@ test("rerunning attach with nothing changed is a no-op", async () => {
   });
 });
 
+// Rewrites the "name" line of a devcontainer.json, a line both sides can edit.
+function renamed(json: string, name: string): string {
+  const next = json.replace(/"name": "[^"]*"/, `"name": "${name}"`);
+  if (next === json) throw new Error("devcontainer.json has no name line");
+  return next;
+}
+
 test("refresh updates unedited files, keeps edited ones, and preserves devcontainer.env", async () => {
   await withTemporaryParent(async (parent) => {
     const { checkout, root } = await attached(parent, "refresh");
     const envFile = join(root, RUNTIME, "devcontainer.env");
     await writeFile(envFile, "AGENT_TOOLS=claude\nCONTEXT7_API_KEY=mine\n");
     const editedFile = join(root, RUNTIME, "devcontainer.json");
-    const edited = `${await readFile(editedFile, "utf8")}\n`;
+    const source = join(checkout, RUNTIME, "devcontainer.json");
+    const edited = renamed(await readFile(editedFile, "utf8"), "mine");
     await writeFile(editedFile, edited);
-    for (const file of ["devcontainer.json", "verify.sh"]) {
-      const source = join(checkout, RUNTIME, file);
-      await writeFile(source, `${await readFile(source, "utf8")}\n# newer\n`);
-    }
+    await writeFile(source, renamed(await readFile(source, "utf8"), "newer"));
+    const verifySource = join(checkout, RUNTIME, "verify.sh");
+    await writeFile(verifySource, `${await readFile(verifySource, "utf8")}\n# newer\n`);
 
     const result = await adhd(checkout, ["attach", root], parent);
 
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toContain("kept your edited .devcontainer/project-adhd/devcontainer.json");
+    expect(result.stdout).toMatch(/conflict +devcontainer\.json/);
+    expect(result.stdout).toMatch(/updated +verify\.sh/);
     expect(await readFile(editedFile, "utf8")).toBe(edited);
-    expect(await readFile(`${editedFile}.adhd-new`, "utf8")).toBe(
-      await readFile(join(checkout, RUNTIME, "devcontainer.json"), "utf8"),
-    );
-    expect(await readFile(join(root, RUNTIME, "verify.sh"), "utf8")).toBe(
-      await readFile(join(checkout, RUNTIME, "verify.sh"), "utf8"),
-    );
+    const offered = await readFile(`${editedFile}.adhd-new`, "utf8");
+    expect(offered).toContain('<<<<<<< yours\n  "name": "mine",');
+    expect(offered).toContain('  "name": "newer",\n>>>>>>> adhd 0.0.0');
+    expect(await readFile(join(root, RUNTIME, "verify.sh"), "utf8")).toBe(await readFile(verifySource, "utf8"));
     expect(await readFile(envFile, "utf8")).toBe("AGENT_TOOLS=claude\nCONTEXT7_API_KEY=mine\n");
 
     const second = await adhd(checkout, ["attach", root], parent);
@@ -283,16 +290,18 @@ test("refresh leaves a user-edited file alone when nothing new was shipped", asy
   });
 });
 
-test("refresh accepts an adopted .adhd-new and later updates that file in place", async () => {
+test("refresh accepts a resolved conflict and later updates that file in place", async () => {
   await withTemporaryParent(async (parent) => {
     const { checkout, root } = await attached(parent, "adopted");
     const editedFile = join(root, RUNTIME, "devcontainer.json");
     const source = join(checkout, RUNTIME, "devcontainer.json");
-    await writeFile(editedFile, `${await readFile(editedFile, "utf8")}\n// mine\n`);
-    await writeFile(source, `${await readFile(source, "utf8")}\n// newer\n`);
+    await writeFile(editedFile, renamed(await readFile(editedFile, "utf8"), "mine"));
+    await writeFile(source, renamed(await readFile(source, "utf8"), "newer"));
     const offered = await adhd(checkout, ["attach", root], parent);
     expect(offered.stderr).toContain("kept your edited .devcontainer/project-adhd/devcontainer.json");
-    await checked(["mv", `${editedFile}.adhd-new`, editedFile], root);
+    // Resolve the conflict by taking the new version.
+    await writeFile(editedFile, await readFile(source, "utf8"));
+    await rm(`${editedFile}.adhd-new`);
     const listRuntime = () => checked(["find", join(root, RUNTIME), "-type", "f"], root);
     const filesBefore = await listRuntime();
 
@@ -310,6 +319,171 @@ test("refresh accepts an adopted .adhd-new and later updates that file in place"
     expect(updated.stderr).not.toContain("kept your edited");
     expect(await readFile(editedFile, "utf8")).toBe(await readFile(source, "utf8"));
     expect(existsSync(`${editedFile}.adhd-new`)).toBe(false);
+  });
+});
+
+test("refresh --porcelain outputs tab-separated machine-readable lines and exit code 3 on conflict", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout, root } = await attached(parent, "porcelain");
+    const editedFile = join(root, RUNTIME, "devcontainer.json");
+    const source = join(checkout, RUNTIME, "devcontainer.json");
+    await writeFile(editedFile, renamed(await readFile(editedFile, "utf8"), "mine"));
+    await writeFile(source, renamed(await readFile(source, "utf8"), "newer"));
+    const verifySource = join(checkout, RUNTIME, "verify.sh");
+    await writeFile(verifySource, `${await readFile(verifySource, "utf8")}\n# newer\n`);
+
+    const result = await adhd(checkout, ["refresh", "--porcelain", root], parent);
+
+    expect(result.exitCode).toBe(3);
+    expect(result.stdout).toContain("conflict\tdevcontainer.json\tdevcontainer.json.adhd-new (1 hunk)\n");
+    expect(result.stdout).toContain("updated\tverify.sh\n");
+    expect(result.stdout).not.toContain("==>");
+  });
+});
+
+test("refresh merges a user edit with a non-overlapping upstream change", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout, root } = await attached(parent, "merge-clean");
+    const editedFile = join(root, RUNTIME, "devcontainer.json");
+    const source = join(checkout, RUNTIME, "devcontainer.json");
+    const pristine = await readFile(source, "utf8");
+    await writeFile(editedFile, renamed(pristine, "mine"));
+    const shipped = `${pristine}// newer\n`;
+    await commitFiles(checkout, { [`${RUNTIME}/devcontainer.json`]: shipped }, "chore: newer runtime");
+
+    const result = await adhd(checkout, ["refresh"], root);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).not.toContain("warning");
+    expect(result.stdout).toMatch(/merged +devcontainer\.json/);
+    expect(await readFile(editedFile, "utf8")).toBe(renamed(shipped, "mine"));
+    expect(existsSync(`${editedFile}.adhd-new`)).toBe(false);
+    const sha = (await checked(["shasum", "-a", "256", source], root)).split(" ")[0];
+    expect(await readFile(join(root, RUNTIME, ".adhd"), "utf8")).toContain(`sha:devcontainer.json=${sha}\n`);
+
+    const again = await adhd(checkout, ["refresh"], root);
+    expect(again.exitCode).toBe(0);
+    expect(again.stdout).toContain("already up to date");
+    expect(await readFile(editedFile, "utf8")).toBe(renamed(shipped, "mine"));
+  });
+});
+
+test("refresh offers the plain new version when the previous one cannot be found", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout } = await makeInstallation(parent);
+    const root = join(parent, "no-base");
+    await makeRepo(root);
+    const source = join(checkout, RUNTIME, "devcontainer.json");
+    // Attaching from uncommitted changes leaves no commit holding what was shipped.
+    await writeFile(source, `${await readFile(source, "utf8")}// uncommitted\n`);
+    expect((await adhd(checkout, ["attach", root, "--agents", "claude"], parent)).exitCode).toBe(0);
+    const editedFile = join(root, RUNTIME, "devcontainer.json");
+    const edited = renamed(await readFile(editedFile, "utf8"), "mine");
+    await writeFile(editedFile, edited);
+    await writeFile(source, `${await readFile(source, "utf8")}// newer\n`);
+
+    const result = await adhd(checkout, ["refresh", root], parent);
+
+    expect(result.exitCode).toBe(3);
+    expect(result.stdout).toMatch(/review +devcontainer\.json -> devcontainer\.json\.adhd-new \(no base; compare by hand\)/);
+    expect(await readFile(editedFile, "utf8")).toBe(edited);
+    expect(await readFile(`${editedFile}.adhd-new`, "utf8")).toBe(await readFile(source, "utf8"));
+  });
+});
+
+test("refresh --dry-run reports the plan and changes nothing", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout, root } = await attached(parent, "dry-run");
+    const runtime = join(root, RUNTIME);
+    await writeFile(join(runtime, "devcontainer.json"), renamed(await readFile(join(runtime, "devcontainer.json"), "utf8"), "mine"));
+    await writeFile(join(runtime, "docker-compose.yml"), `${await readFile(join(runtime, "docker-compose.yml"), "utf8")}# mine\n`);
+    for (const [file, change] of [["devcontainer.json", (text: string) => renamed(text, "newer")], ["docker-compose.yml", (text: string) => `# newer\n${text}`], ["verify.sh", (text: string) => `${text}# newer\n`]] as const) {
+      const source = join(checkout, RUNTIME, file);
+      await writeFile(source, change(await readFile(source, "utf8")));
+    }
+    const snapshot = async () => {
+      const files = (await checked(["find", runtime, "-type", "f"], root)).split("\n").filter(Boolean).sort();
+      const contents = await Promise.all(files.map((file) => readFile(file, "utf8")));
+      return { files, contents, exclude: await readFile(join(root, ".git/info/exclude"), "utf8") };
+    };
+    const before = await snapshot();
+
+    const result = await adhd(checkout, ["refresh", "--dry-run"], root);
+
+    expect(result.exitCode).toBe(3);
+    expect(result.stdout).toMatch(/conflict +devcontainer\.json -> devcontainer\.json\.adhd-new \(1 hunk\)/);
+    expect(result.stdout).toMatch(/merged +docker-compose\.yml/);
+    expect(result.stdout).toMatch(/updated +verify\.sh/);
+    expect(result.stdout).toContain("nothing was changed");
+    expect(await snapshot()).toEqual(before);
+  });
+});
+
+test("refresh refuses a repository that is not attached or not attached by adhd", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout } = await makeInstallation(parent);
+    const plain = join(parent, "plain");
+    await makeRepo(plain);
+    const foreign = join(parent, "foreign-refresh");
+    await makeRepo(foreign, { [`${RUNTIME}/devcontainer.json`]: "{}\n" });
+
+    const notAttached = await adhd(checkout, ["refresh"], plain);
+    expect(notAttached.exitCode).not.toBe(0);
+    expect(notAttached.stderr).toContain("project-adhd is not attached to");
+    expect(existsSync(join(plain, RUNTIME))).toBe(false);
+
+    const notOurs = await adhd(checkout, ["refresh", foreign], parent);
+    expect(notOurs.exitCode).not.toBe(0);
+    expect(notOurs.stderr).toContain("was not created by adhd");
+    expect(await readFile(join(foreign, RUNTIME, "devcontainer.json"), "utf8")).toBe("{}\n");
+  });
+});
+
+test("refresh in tracked mode refuses uncommitted runtime changes unless --force", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout } = await makeInstallation(parent);
+    const root = join(parent, "tracked-refresh");
+    await makeRepo(root);
+    expect((await adhd(checkout, ["attach", root, "--track", "--agents", "claude"], parent)).exitCode).toBe(0);
+    await checked(["git", "add", "-A"], root);
+    await checked(["git", "commit", "-q", "-m", "attach"], root);
+    // Ignored local files do not count as changes.
+    expect((await adhd(checkout, ["refresh"], root)).exitCode).toBe(0);
+
+    const editedFile = join(root, RUNTIME, "verify.sh");
+    const edited = `${await readFile(editedFile, "utf8")}# mine\n`;
+    await writeFile(editedFile, edited);
+    const source = join(checkout, RUNTIME, "verify.sh");
+    await writeFile(source, `# newer\n${await readFile(source, "utf8")}`);
+
+    const refused = await adhd(checkout, ["refresh"], root);
+    expect(refused.exitCode).not.toBe(0);
+    expect(refused.stderr).toContain("uncommitted changes");
+    expect(await readFile(editedFile, "utf8")).toBe(edited);
+
+    const forced = await adhd(checkout, ["refresh", "--force"], root);
+    expect(forced.exitCode).toBe(0);
+    expect(forced.stdout).toMatch(/merged +verify\.sh/);
+    expect(forced.stdout).toContain("git -C");
+    const merged = await readFile(editedFile, "utf8");
+    expect(merged).toStartWith("# newer\n");
+    expect(merged).toEndWith("# mine\n");
+  });
+});
+
+test("refresh keeps devcontainer.env and refreshes the ignore rules", async () => {
+  await withTemporaryParent(async (parent) => {
+    const { checkout, root } = await attached(parent, "refresh-env");
+    const envFile = join(root, RUNTIME, "devcontainer.env");
+    await writeFile(envFile, "AGENT_TOOLS=codex\n");
+    await writeFile(join(root, ".git/info/exclude"), "custom\n");
+
+    const result = await adhd(checkout, ["refresh", root], parent);
+
+    expect(result.exitCode).toBe(0);
+    expect(await readFile(envFile, "utf8")).toBe("AGENT_TOOLS=codex\n");
+    expect(await readFile(join(root, ".git/info/exclude"), "utf8")).toBe(`custom\n${BLOCK}`);
+    expect(await status(root)).toBe("");
   });
 });
 
@@ -661,7 +835,7 @@ test("update follows main when the channel is main", async () => {
 
     expect(result.exitCode).toBe(0);
     expect(existsSync(join(checkout, "NEWS"))).toBe(true);
-    expect(result.stdout).toContain("adhd attach");
+    expect(result.stdout).toContain("adhd refresh");
   });
 });
 
@@ -710,7 +884,7 @@ test("update moves a release install to the newest tag and reports it", async ()
     expect(await headTag(checkout)).toBe("v0.10.0");
     expect(result.stdout).toContain("Updated project-adhd 0.0.0 → 0.10.0");
     expect(result.stdout).toContain("releases/tag/v0.10.0");
-    expect(result.stdout).toContain("adhd attach");
+    expect(result.stdout).toContain("adhd refresh");
 
     const again = await adhd(checkout, ["update"], parent);
     expect(again.exitCode).toBe(0);
@@ -890,14 +1064,15 @@ test("attach records the version in the marker and reports a version change", as
   });
 });
 
-test("usage lists version and update --ref", async () => {
+test("usage lists version, update --ref, and refresh", async () => {
   await withTemporaryParent(async (parent) => {
     const { checkout } = await makeInstallation(parent);
 
     const result = await adhd(checkout, ["--help"], parent);
 
     expect(result.stdout).toContain("  version\n");
-    expect(result.stdout).toContain("  update [--ref <release|branch|tag>]\n");
+    expect(result.stdout).toMatch(/^  update \[--ref <release\|branch\|tag>\] +update this adhd installation$/m);
+    expect(result.stdout).toMatch(/^  refresh \[dir\] \[--dry-run\] \[--force\] +apply the installed version/m);
     expect(result.stdout).toContain("  herdr [dir] [-- <herdr arguments>]\n");
   });
 });

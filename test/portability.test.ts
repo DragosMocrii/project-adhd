@@ -11,6 +11,7 @@ const HOST_SCRIPTS = [
   "libexec/adhd/common.sh",
   "libexec/adhd/attach.sh",
   "libexec/adhd/detach.sh",
+  "libexec/adhd/refresh.sh",
   "libexec/adhd/update.sh",
   "libexec/adhd/version.sh",
   "libexec/adhd/new.sh",
